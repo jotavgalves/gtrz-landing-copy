@@ -1,0 +1,25 @@
+{
+  "name": "gtrz-platform",
+  "private": true,
+  "bin": {
+    "gtrz-setup": "./scripts/setup-production-secrets.mjs",
+    "gtrz-enable-analytics": "./scripts/enable-analytics-engine.mjs"
+  },
+  "packageManager": "pnpm@10.0.0",
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "sharp", "workerd"]
+  },
+  "scripts": {
+    "dev:web": "pnpm --filter @gtrz/web dev",
+    "dev:admin": "pnpm --filter @gtrz/admin dev",
+    "dev:api": "pnpm --filter @gtrz/api dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "deploy:api": "pnpm --filter @gtrz/api deploy",
+    "deploy:web": "pnpm --filter @gtrz/web deploy",
+    "deploy:admin": "pnpm --filter @gtrz/admin deploy",
+    "setup:secrets": "node scripts/setup-production-secrets.mjs",
+    "setup:analytics": "node scripts/enable-analytics-engine.mjs"
+  }
+}

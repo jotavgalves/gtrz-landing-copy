@@ -1,0 +1,138 @@
+---
+import type { Locale, SiteSettings } from '@/lib/cms';
+
+const {locale,settings={}}=Astro.props as {locale:Locale;settings?:SiteSettings};
+const es=locale==='es';
+const instagram=typeof settings.social?.instagram==='string'&&settings.social.instagram
+  ?String(settings.social.instagram)
+  :typeof settings.social?.instagramUrl==='string'&&settings.social.instagramUrl
+    ?String(settings.social.instagramUrl)
+    :'https://instagram.com/gtrzeventos';
+const langQuery=es?'?lang=es':'';
+const copy=es?{
+  instagram:'Instagram',
+  contact:'Contacto',
+  privacy:'Privacidad',
+  terms:'Términos',
+  freelancers:'Freelancers',
+  suggestions:'Sugerencias'
+}:{
+  instagram:'Instagram',
+  contact:'Contato',
+  privacy:'Privacidade',
+  terms:'Termos',
+  freelancers:'Freelancers',
+  suggestions:'Sugestões'
+};
+const year=new Date().getFullYear();
+---
+<footer class="gtrz-footer">
+  <div class="gtrz-footer-inner">
+    <a class="gtrz-footer-brand" href={es?'/?lang=es':'/'} aria-label="GTRZ">
+      <img src="/brand/gtrz-wordmark.svg" alt="GTRZ" />
+    </a>
+
+    <nav class="gtrz-footer-nav" aria-label={es?'Enlaces del pie de página':'Links do rodapé'}>
+      <a href={instagram} target="_blank" rel="noreferrer" data-track="footer.instagram">{copy.instagram}</a>
+      <a href={`/contato${langQuery}`} data-track="footer.contact">{copy.contact}</a>
+      <a href={`/privacidade${langQuery}`} data-track="footer.privacy">{copy.privacy}</a>
+      <a href={`/termos${langQuery}`} data-track="footer.terms">{copy.terms}</a>
+      <a href={`/trabalhe-conosco${langQuery}`} data-track="footer.freelancers">{copy.freelancers}</a>
+      <a href={`/sugestoes${langQuery}`} data-track="footer.suggestions">{copy.suggestions}</a>
+    </nav>
+
+    <span class="gtrz-footer-copy">© {year} GTRZ Eventos</span>
+  </div>
+</footer>
+
+<style>
+  .gtrz-footer{
+    width:100%;
+    background:#070707;
+    color:#fff;
+    border-top:1px solid rgba(255,255,255,.08);
+  }
+  .gtrz-footer-inner{
+    width:min(calc(100% - 28px),1320px);
+    min-height:72px;
+    margin-inline:auto;
+    display:grid;
+    grid-template-columns:auto 1fr;
+    align-items:center;
+    gap:16px 24px;
+    padding:18px 0;
+  }
+  .gtrz-footer-brand{
+    display:inline-flex;
+    align-items:center;
+    width:max-content;
+    opacity:.82;
+    transition:opacity .18s ease;
+  }
+  .gtrz-footer-brand:hover{opacity:1}
+  .gtrz-footer-brand img{
+    width:64px;
+    height:auto;
+  }
+  .gtrz-footer-nav{
+    display:flex;
+    align-items:center;
+    justify-content:flex-end;
+    flex-wrap:wrap;
+    gap:10px 18px;
+    min-width:0;
+  }
+  .gtrz-footer-nav a{
+    color:#7c7571;
+    font-size:.56rem;
+    font-weight:800;
+    letter-spacing:.085em;
+    line-height:1;
+    text-transform:uppercase;
+    white-space:nowrap;
+    transition:color .18s ease;
+  }
+  .gtrz-footer-nav a:hover{color:#fff}
+  .gtrz-footer-copy{
+    grid-column:1 / -1;
+    color:#4f4946;
+    font-size:.49rem;
+    font-weight:800;
+    letter-spacing:.09em;
+    line-height:1;
+    text-transform:uppercase;
+  }
+  @media(min-width:760px){
+    .gtrz-footer-inner{
+      width:min(calc(100% - 48px),1320px);
+      min-height:76px;
+      grid-template-columns:auto 1fr auto;
+      gap:32px;
+      padding:0;
+    }
+    .gtrz-footer-brand img{width:68px}
+    .gtrz-footer-nav{justify-content:center;gap:24px}
+    .gtrz-footer-copy{
+      grid-column:auto;
+      text-align:right;
+      white-space:nowrap;
+    }
+  }
+  @media(max-width:520px){
+    .gtrz-footer-inner{
+      grid-template-columns:auto 1fr;
+      gap:14px 18px;
+      padding:18px 0 16px;
+    }
+    .gtrz-footer-nav{
+      justify-content:flex-end;
+      gap:10px 14px;
+    }
+    .gtrz-footer-copy{
+      padding-top:2px;
+    }
+  }
+  @media(prefers-reduced-motion:reduce){
+    .gtrz-footer-brand,.gtrz-footer-nav a{transition:none}
+  }
+</style>

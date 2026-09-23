@@ -1,0 +1,359 @@
+---
+import SiteLayout from '@/layouts/SiteLayout.astro';
+import EventFeedbackInvite from '@/components/EventFeedbackInvite.astro';
+import { API_BASE, publicApi } from '@/lib/api';
+import { getHomePage } from '@/lib/cms';
+import { getPublicCopy } from '@/lib/public-copy';
+import type { Locale } from '@/lib/cms';
+import '@/styles/event-page-premium.css';
+
+const {slug}=Astro.params;
+const locale:Locale=Astro.url.searchParams.get('lang')==='es'?'es':'pt-BR';
+const isEs=locale==='es';
+const site=await getHomePage();
+const c=getPublicCopy(site.settings,locale,'eventPage');
+const eventListHref=isEs?'/?lang=es#eventos':'/#eventos';
+const backToEventsLabel='EVENTOS';
+let payload:any=null;
+try{payload=await publicApi<any>(`/api/public/events/${encodeURIComponent(slug||'')}`)}catch{Astro.response.status=404}
+const loc=payload?.localizations?.find((x:any)=>x.locale===locale)||payload?.localizations?.find((x:any)=>x.locale==='pt-BR')||payload?.localizations?.[0];
+const event=payload?.event;
+const rawTickets=payload?.tickets||[];
+const artists=payload?.artists||[];
+const theme=event?(()=>{try{return JSON.parse(event.theme_json||'{}')}catch{return {}}})():{};
+const mediaUrl=(id?:string|null)=>id?`${API_BASE}/api/media/${encodeURIComponent(id)}`:'';
+const parseJson=(value:any)=>{if(value&&typeof value==='object')return value;try{return JSON.parse(value||'{}')}catch{return {}}};
+const eventSectionDefaults=[
+  {id:'about',theme:'dark'},
+  {id:'lineup',theme:'dark'},
+  {id:'countdown',theme:'light'},
+  {id:'tickets',theme:'light'},
+  {id:'location',theme:'dark'},
+  {id:'terms',theme:'dark'},
+  {id:'instagram',theme:'light'}
+] as const;
+const defaultSectionIds=eventSectionDefaults.map(section=>section.id);
+const configuredSectionOrder=Array.isArray(theme.sectionOrder)?theme.sectionOrder.filter((id:any)=>defaultSectionIds.includes(id)):[];
+const eventSectionOrder=[...configuredSectionOrder,...defaultSectionIds.filter(id=>!configuredSectionOrder.includes(id))];
+const eventSectionOrderMap=Object.fromEntries(eventSectionOrder.map((id,index)=>[id,index+10]));
+const eventSectionThemes=parseJson(theme.sectionThemes);
+const sectionTheme=(id:string)=>{
+  const configured=eventSectionThemes?.[id];
+  if(configured==='light'||configured==='dark')return configured;
+  return eventSectionDefaults.find(section=>section.id===id)?.theme||'dark';
+};
+const sectionStyle=(id:string)=>`order:${eventSectionOrderMap[id]??99}`;
+const normalizeEventDate=(value?:string|null)=>{
+  if(!value)return '';
+  const raw=String(value).trim();
+  if(/[zZ]|[+-]\d\d:\d\d$/.test(raw))return raw;
+  const withSeconds=raw.length===16?`${raw}:00`:raw;
+  return `${withSeconds}-03:00`;
+};
+const now=Date.now();
+const eventStartIso=event?normalizeEventDate(event.starts_at):'';
+const eventEndIso=event?normalizeEventDate(event.ends_at):'';
+const eventStart=eventStartIso?Date.parse(eventStartIso):0;
+const eventEnd=eventEndIso?Date.parse(eventEndIso):0;
+const eventEnded=!!event&&(event.status==='finished'||(eventEnd>0&&eventEnd<now));
+const eventStatusLabel=(status:string)=>isEs?({scheduled:'PRÓXIMAMENTE',sales_open:'VENTAS ABIERTAS',sold_out:'AGOTADO',finished:'EVENTO REALIZADO'} as Record<string,string>)[status]||'':({scheduled:'EM BREVE',sales_open:'VENDAS ABERTAS',sold_out:'ESGOTADO',finished:'EVENTO REALIZADO'} as Record<string,string>)[status]||'';
+const availabilityLabels=isEs?{coming_soon:'PRÓXIMAMENTE',available:'DISPONIBLE',last_units:'ÚLTIMAS ENTRADAS',sold_out:'AGOTADO',closed:'VENTAS CERRADAS'}:{coming_soon:'EM BREVE',available:'DISPONÍVEL',last_units:'ÚLTIMOS INGRESSOS',sold_out:'ESGOTADO',closed:'VENDAS ENCERRADAS'};
+const effectiveAvailability=(ticket:any)=>{
+  if(eventEnded)return 'closed';
+  if(event?.status==='sold_out')return 'sold_out';
+  if(ticket.starts_at&&new Date(ticket.starts_at).getTime()>now)return 'coming_soon';
+  if(ticket.ends_at&&new Date(ticket.ends_at).getTime()<now)return 'closed';
+  return ticket.availability||({active:'available',sold_out:'sold_out',closed:'closed',draft:'coming_soon'} as Record<string,string>)[ticket.status]||'available';
+};
+const money=(cents:any,currency='BRL')=>cents==null?'':new Intl.NumberFormat(isEs?'es-VE':'pt-BR',{style:'currency',currency}).format(Number(cents)/100);
+const appendWhatsAppMessage=(raw:string,message:string)=>{
+  if(!raw)return '';
+  let base=raw.trim();
+  if(/^\+?[\d\s().-]{8,}$/.test(base))base=`https://wa.me/${base.replace(/\D/g,'')}`;
+  if(!message)return base;
+  try{const url=new URL(base);url.searchParams.set('text',message);return url.toString()}catch{return base}
+};
+const tickets=rawTickets.map((ticket:any)=>{
+  const copy={title:ticket.name,type:isEs?'ENTRADA':'INGRESSO',badge:'',description:'',meta:'',saving:'',note:'',buttonPrimary:isEs?'Comprar entrada':'Comprar ingresso',buttonSecondary:isEs?'Comprar en Sympla':'Comprar no Sympla',soldOutLabel:isEs?'AGOTADO':'ESGOTADO',lockedLabel:isEs?'PRÓXIMAMENTE':'EM BREVE',whatsappMessage:'',...parseJson(isEs?ticket.content_es_json:ticket.content_pt_json)};
+  const availability=effectiveAvailability(ticket);
+  const whatsapp=appendWhatsAppMessage(ticket.whatsapp_url||'',copy.whatsappMessage||'');
+  const sympla=ticket.sympla_url||ticket.sales_url||'';
+  return {...ticket,copy,availability,whatsapp,sympla,custom:ticket.custom_url||''};
+});
+const isPurchasable=(ticket:any)=>['available','last_units'].includes(ticket.availability)&&((['whatsapp','both'].includes(ticket.purchase_mode)&&ticket.whatsapp)||(['sympla','both'].includes(ticket.purchase_mode)&&ticket.sympla)||(ticket.purchase_mode==='custom'&&ticket.custom));
+const firstPurchasable=tickets.find(isPurchasable);
+const ticketCount=tickets.length;
+const singleTicket=ticketCount===1?tickets[0]:null;
+const hasWhatsappTicket=tickets.some((ticket:any)=>['whatsapp','both'].includes(ticket.purchase_mode)&&ticket.whatsapp);
+const hasSymplaTicket=tickets.some((ticket:any)=>['sympla','both'].includes(ticket.purchase_mode)&&ticket.sympla);
+const hasCustomTicket=tickets.some((ticket:any)=>ticket.purchase_mode==='custom'&&ticket.custom);
+const ticketSequenceLabel=(ticket:any,index:number)=>{
+  const raw=`${ticket?.copy?.title||''} ${ticket?.name||''}`;
+  const prefix=/\blote\b/i.test(raw)?'LOTE':(ticket?.copy?.type||(isEs?'ENTRADA':'INGRESSO'));
+  return `${String(prefix).toUpperCase()} ${String(index+1).padStart(2,'0')}`;
+};
+const instagram=(site.settings as any)?.social?.instagramUrl||(site.settings as any)?.social?.instagram||(site.settings as any)?.social?.instagram_url||'https://www.instagram.com/gtrzeventos/';
+const mapQuery=event?.venue_address||[event?.venue_name,event?.city,event?.state].filter(Boolean).join(', ');
+const mapEmbed=mapQuery?`https://www.google.com/maps?q=${encodeURIComponent(mapQuery)}&output=embed`:'';
+const mapLink=mapQuery?`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`:'';
+const countdownEnabled=!!event&&!eventEnded&&Number.isFinite(eventStart)&&eventStart>now;
+const countdownTarget=eventStartIso;
+const countdownInitialMs=countdownEnabled?Math.max(0,eventStart-now):0;
+const countdownInitialDays=Math.floor(countdownInitialMs/86400000);
+const countdownInitialHours=Math.floor((countdownInitialMs%86400000)/3600000);
+const countdownInitialMinutes=Math.floor((countdownInitialMs%3600000)/60000);
+const countdownInitialSeconds=Math.floor((countdownInitialMs%60000)/1000);
+const countdownPad=(value:number)=>String(value).padStart(2,'0');
+const heroMedia=mediaUrl(event?.hero_media_id);
+const logoMedia=mediaUrl(event?.logo_media_id);
+const posterMedia=mediaUrl(theme.posterMediaId||theme.poster_media_id);
+const backgroundMedia=heroMedia;
+const statusText=event?eventStatusLabel(event.status):'';
+const eventTimeZone='America/Recife';
+const capitalizeFirst=(value:string)=>value?value.charAt(0).toUpperCase()+value.slice(1):value;
+const dateLong=eventStartIso?capitalizeFirst(new Intl.DateTimeFormat(isEs?'es-VE':'pt-BR',{weekday:'short',day:'2-digit',month:'long',year:'numeric',timeZone:eventTimeZone}).format(new Date(eventStartIso))):'';
+const dateShort=eventStartIso?new Intl.DateTimeFormat(isEs?'es-VE':'pt-BR',{day:'2-digit',month:'short',timeZone:eventTimeZone}).format(new Date(eventStartIso)).replace('.','').toUpperCase():'';
+const timeStart=eventStartIso?new Intl.DateTimeFormat(isEs?'es-VE':'pt-BR',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:eventTimeZone}).format(new Date(eventStartIso)):'';
+const timeEnd=eventEndIso?new Intl.DateTimeFormat(isEs?'es-VE':'pt-BR',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:eventTimeZone}).format(new Date(eventEndIso)):'';
+const eventTitle=loc?.seo_title||loc?.title||event?.slug||'GTRZ Eventos';
+const eventShareTitle=event?(`${eventTitle} · GTRZ Eventos`):eventTitle;
+const eventSeoDescription=event
+  ?(loc?.summary||(
+    isEs
+      ?`${eventTitle} — ${dateLong}${event.venue_name?` en ${event.venue_name}`:''}, ${event.city}${event.state?` · ${event.state}`:''}. Entradas e información oficial de GTRZ Eventos.`
+      :`${eventTitle} — ${dateLong}${event.venue_name?` em ${event.venue_name}`:''}, ${event.city}${event.state?` · ${event.state}`:''}. Ingressos e informações oficiais da GTRZ Eventos.`
+  ))
+  :(isEs?'Evento GTRZ no disponible.':'Evento GTRZ não disponível.');
+const canonicalPtUrl=new URL(`/eventos/${encodeURIComponent(slug||'')}`,Astro.url.origin).toString();
+const canonicalEsUrl=new URL(`/es/eventos/${encodeURIComponent(slug||'')}`,Astro.url.origin).toString();
+const canonicalUrl=isEs?canonicalEsUrl:canonicalPtUrl;
+const eventOgImage=heroMedia||posterMedia||logoMedia||'';
+const eventOgImageAlt=isEs
+  ?`Arte oficial de ${eventTitle}, evento de GTRZ Eventos`
+  :`Arte oficial de ${eventTitle}, evento da GTRZ Eventos`;
+
+const eventTerms=isEs?{
+  eyebrow:'INFORMACIÓN IMPORTANTE',
+  title:'TÉRMINOS DEL EVENTO',
+  intro:'Al adquirir una entrada y participar en un evento producido por GTRZ Eventos, el participante declara conocer y aceptar las condiciones de acceso y participación de esta edición.',
+  items:[
+    {
+      title:'Imagen, fotografía y audiovisual',
+      body:'Durante el evento podrán realizarse fotografías, grabaciones y otros registros audiovisuales del ambiente y del público. Al ingresar al evento, el participante autoriza gratuitamente el uso de su imagen, voz y apariencia eventualmente captadas en esos registros para fines institucionales, promocionales, publicitarios y de divulgación de GTRZ Eventos y de sus eventos, en medios físicos o digitales, en Brasil y en el exterior, incluidas redes sociales, sitios web, piezas publicitarias, videos y materiales de divulgación, sin limitación territorial. El uso deberá respetar la dignidad, el honor y la imagen del participante. Los derechos sobre las fotografías, videos y demás materiales producidos oficialmente para el evento serán ejercidos por GTRZ Eventos o por los respectivos profesionales contratados, conforme a los derechos de producción y utilización aplicables a cada material.'
+    },
+    {
+      title:'Cancelación y reembolso',
+      body:'Para entradas adquiridas por internet, las solicitudes de cancelación deberán respetar los derechos obligatorios previstos por la legislación aplicable. GTRZ acepta solicitudes realizadas dentro de los 7 días corridos posteriores a la compra, siempre que la solicitud sea presentada con una antelación mínima de 3 días corridos respecto de la fecha del evento. Por lo tanto, aun cuando la compra se encuentre dentro del plazo de 7 días, no se aceptarán solicitudes presentadas cuando falten menos de 3 días para el evento, salvo cuando la legislación aplicable garantice una condición más favorable al consumidor. En caso de cancelación del evento por la organización, se aplicarán las reglas de restitución correspondientes.'
+    },
+    {
+      title:'Artículos y conductas prohibidas',
+      body:'Está prohibido ingresar o permanecer en el evento portando, utilizando o distribuyendo drogas ilícitas, armas de cualquier naturaleza, objetos punzocortantes, materiales contundentes o cualquier otro artículo que pueda poner en riesgo la integridad física del público, del equipo o de terceros. La organización podrá impedir el ingreso o determinar la retirada de quien incumpla estas reglas, sin perjuicio de las medidas legales aplicables.'
+    },
+    {
+      title:'Alimentos y bebidas',
+      body:'No está permitido ingresar con bebidas o alimentos de cualquier especie adquiridos fuera del evento. Se exceptúan las situaciones justificadas por necesidad médica, alimentaria u otra condición cuya garantía resulte obligatoria conforme a la legislación aplicable.'
+    },
+    {
+      title:'Menores de edad',
+      body:'Los menores de 18 años solamente podrán ingresar cuando la participación de menores esté permitida para aquella edición y mediante presentación de la documentación y de la autorización firmada por el responsable legal exigidas por la organización. La autorización no elimina eventuales restricciones legales relacionadas con la clasificación del evento, el establecimiento o la comercialización y el consumo de bebidas alcohólicas.'
+    },
+    {
+      title:'Control de acceso',
+      body:'La organización podrá realizar la verificación de la entrada, documento de identificación e inspección de bolsos, mochilas y pertenencias, dentro de los límites legales, con el objetivo de preservar la seguridad y el cumplimiento de las reglas del evento.'
+    }
+  ],
+  accept:'La adquisición de la entrada implica el conocimiento de estas condiciones y de las informaciones específicas divulgadas para esta edición.'
+}:{
+  eyebrow:'INFORMAÇÕES IMPORTANTES',
+  title:'TERMOS DO EVENTO',
+  intro:'Ao adquirir um ingresso e participar de um evento produzido pela GTRZ Eventos, o participante declara estar ciente e de acordo com as condições de acesso e participação desta edição.',
+  items:[
+    {
+      title:'Imagem, fotografia e audiovisual',
+      body:'Durante o evento poderão ser realizadas fotografias, filmagens e outros registros audiovisuais do ambiente e do público. Ao ingressar no evento, o participante autoriza, de forma gratuita, o uso de sua imagem, voz e aparência eventualmente captadas nesses registros para fins institucionais, promocionais, publicitários e de divulgação da GTRZ Eventos e de seus eventos, em meios físicos ou digitais, no Brasil e no exterior, inclusive em redes sociais, websites, peças publicitárias, vídeos e materiais de divulgação, sem limitação territorial. A utilização deverá respeitar a dignidade, a honra e a imagem do participante. Os direitos sobre as fotografias, vídeos e demais materiais produzidos oficialmente para o evento serão exercidos pela GTRZ Eventos ou pelos respectivos profissionais contratados, conforme os direitos de produção e utilização aplicáveis a cada material.'
+    },
+    {
+      title:'Cancelamento e reembolso',
+      body:'Para ingressos adquiridos pela internet, os pedidos de cancelamento deverão respeitar os direitos obrigatórios previstos na legislação aplicável. A GTRZ aceita solicitações realizadas em até 7 dias corridos após a compra, desde que o pedido seja apresentado com antecedência mínima de 3 dias corridos da realização do evento. Assim, ainda que a compra esteja dentro do prazo de 7 dias, não serão aceitas solicitações apresentadas quando faltarem menos de 3 dias para o evento, salvo quando a legislação aplicável assegurar condição mais favorável ao consumidor. Em caso de cancelamento do evento pela organização, serão aplicadas as regras de restituição correspondentes.'
+    },
+    {
+      title:'Itens e condutas proibidas',
+      body:'É proibida a entrada ou permanência no evento portando, utilizando ou distribuindo drogas ilícitas, armas de qualquer natureza, objetos perfurocortantes, materiais contundentes ou quaisquer outros itens que possam colocar em risco a integridade física do público, da equipe ou de terceiros. A organização poderá impedir a entrada ou determinar a retirada de quem descumprir essas regras, sem prejuízo das medidas legais cabíveis.'
+    },
+    {
+      title:'Alimentos e bebidas',
+      body:'Não é permitida a entrada com bebidas ou alimentos de qualquer espécie adquiridos fora do evento. Ficam ressalvadas situações justificadas por necessidade médica, alimentar ou outra condição cuja garantia seja obrigatória conforme a legislação aplicável.'
+    },
+    {
+      title:'Menores de idade',
+      body:'Menores de 18 anos somente poderão ingressar quando a participação de menores for permitida para aquela edição e mediante apresentação da documentação e da autorização assinada pelo responsável legal exigidas pela organização. A autorização não afasta eventuais restrições legais relacionadas à classificação do evento, ao estabelecimento ou à comercialização e ao consumo de bebidas alcoólicas.'
+    },
+    {
+      title:'Controle de acesso',
+      body:'A organização poderá realizar conferência de ingresso, documento de identificação e inspeção de bolsas, mochilas e pertences, dentro dos limites legais, com a finalidade de preservar a segurança e o cumprimento das regras do evento.'
+    }
+  ],
+  accept:'A aquisição do ingresso implica ciência destas condições e das informações específicas divulgadas para esta edição.'
+};
+---
+<SiteLayout
+  locale={locale}
+  title={eventShareTitle}
+  description={eventSeoDescription}
+  settings={site.settings}
+  canonicalUrl={canonicalUrl}
+  alternatePtUrl={canonicalPtUrl}
+  alternateEsUrl={canonicalEsUrl}
+  ogImage={eventOgImage}
+  ogImageAlt={eventOgImageAlt}
+>
+  {event ? <main class={`event-premium ${eventEnded?'event-finished':''}`} style={`--event-accent:${theme.primary||'#ff1a12'};--event-bg:${theme.background||'#090909'};--event-fg:${theme.foreground||'#fffdf8'}`}>
+    <section class="event-premium-hero" data-section="event_hero">
+      <div class="event-premium-hero-bg">{backgroundMedia&&<img src={backgroundMedia} alt="" />}</div>
+      <div class="event-shell">
+        <a class="event-back event-back-hero" href={eventListHref} aria-label={isEs?'Volver a eventos':'Voltar aos eventos'}>
+          <svg class="event-back-arrow" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+            <path d="M11.75 4.75 6.5 10l5.25 5.25M6.75 10h7.75" />
+          </svg>
+          <span>{backToEventsLabel}</span>
+        </a>
+        <div class={`event-hero-grid-premium ${posterMedia?'has-poster':'no-poster'}`}>
+          <div class="event-hero-copy">
+            {logoMedia&&<img class="event-event-logo" src={logoMedia} alt={loc?.title||event.slug}/>} 
+            <span class="event-eyebrow event-hero-location">{event.city}{event.state?` · ${event.state}`:''}</span>
+            <h1 class="event-display">{loc?.title||event.slug}</h1>
+            {loc?.summary&&<p class="event-hero-summary">{loc.summary}</p>}
+            {statusText&&<span class="event-hero-status">{statusText}</span>}
+            <div class="event-hero-cta-row">
+              {!eventEnded&&tickets.length>0&&<a class="primary" href="#ingressos">{isEs?'VER ENTRADAS':'VER INGRESSOS'}</a>}
+              {mapLink&&<a href={mapLink} target="_blank" rel="noopener">{isEs?'CÓMO LLEGAR':'COMO CHEGAR'}</a>}
+            </div>
+          </div>
+          {posterMedia&&<figure class="event-poster-frame">
+            <div class="event-poster-kicker"><span>{isEs?'ARTE OFICIAL':'ARTE OFICIAL'}</span><strong>{dateShort}</strong></div>
+            <img src={posterMedia} alt={`${isEs?'Cartel oficial de':'Post oficial de'} ${loc?.title||event.slug}`}/>
+          </figure>}
+        </div>
+      </div>
+      <div class="event-facts-band">
+        <div class="event-shell">
+          <div class="event-facts event-facts-strip">
+            <div class="event-fact"><small>{c.dateLabel}</small><strong>{dateLong}</strong></div>
+            <div class="event-fact event-fact-time"><small>{isEs?'HORARIO':'HORÁRIO'}</small><strong><span>{timeStart}</span>{timeEnd&&<><b aria-hidden="true">-</b><span>{timeEnd}</span></>}</strong></div>
+            <div class="event-fact"><small>{c.venueLabel}</small><strong>{event.venue_name||event.city}</strong></div>
+            <div class="event-fact"><small>{isEs?'CIUDAD':'CIDADE'}</small><strong>{event.city}{event.state?` · ${event.state}`:''}</strong></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    {loc?.description&&<section class="event-about-premium" data-section="event_about" data-section-theme={sectionTheme('about')} style={sectionStyle('about')}><div class="event-shell event-about-grid"><div><span class="event-eyebrow">{c.aboutLabel}</span><h2 class="event-display">{isEs?'LA NOCHE.':'A NOITE.'}</h2><div class="event-about-stamp">{dateShort} · {event.city.toUpperCase()}</div></div><div class="event-about-copy">{loc.description}</div></div></section>}
+
+    {artists.length>0&&<section class="event-lineup-premium" data-section="event_lineup" data-section-theme={sectionTheme('lineup')} style={sectionStyle('lineup')}><div class="event-shell"><div class="event-section-head-premium"><div><span class="event-eyebrow">{c.lineupEyebrow}</span><h2 class="event-display">{c.lineupTitle}</h2></div><p>{isEs?'Los nombres que van a conducir esta edición.':'Os nomes que vão conduzir esta edição.'}</p></div><div class={`event-artist-grid count-${Math.min(artists.length,4)}`}>{artists.map((artist:any,index:number)=><article class={`event-artist-card ${artist.media_id?'has-photo':'no-photo'}`}>{artist.media_id&&<img src={mediaUrl(artist.media_id)} alt={artist.name} loading="lazy"/>}<span class="event-artist-number">{String(index+1).padStart(2,'0')}</span><div class="event-artist-copy"><strong>{artist.name}</strong><span>{artist.role||''}</span>{artist.instagram_url&&<a class="event-back" href={artist.instagram_url} target="_blank" rel="noopener">Instagram ↗</a>}</div></article>)}</div></div></section>}
+
+    {countdownEnabled&&<section class="event-countdown" data-section="event_countdown" data-section-theme={sectionTheme('countdown')} style={sectionStyle('countdown')} data-countdown-end={countdownTarget}>
+      <div class="event-shell event-countdown-inner"><div class="event-countdown-copy"><span class="event-eyebrow">{isEs?'CUENTA REGRESIVA':'CONTAGEM REGRESSIVA'}</span><strong>{isEs?'LA NOCHE EMPIEZA EN...':'A NOITE COMEÇA EM...'}</strong></div><div class="event-clock"><div class="event-clock-item"><b data-clock="days">{countdownPad(countdownInitialDays)}</b><small>{isEs?'Días':'Dias'}</small></div><div class="event-clock-item"><b data-clock="hours">{countdownPad(countdownInitialHours)}</b><small>{isEs?'Horas':'Horas'}</small></div><div class="event-clock-item"><b data-clock="minutes">{countdownPad(countdownInitialMinutes)}</b><small>Min</small></div><div class="event-clock-item"><b data-clock="seconds">{countdownPad(countdownInitialSeconds)}</b><small>Seg</small></div></div></div>
+    </section>}
+
+    <section class:list={['event-tickets-premium',ticketCount===1?'single-ticket':'multiple-tickets']} id="ingressos" data-section="event_tickets" data-section-theme={sectionTheme('tickets')} style={sectionStyle('tickets')}>
+      <div class="event-shell">
+        <div class="event-section-head-premium">
+          <div>
+            <span class="event-eyebrow">{c.ticketsEyebrow}</span>
+            <h2 class="event-display">{c.ticketsTitle}</h2>
+          </div>
+          {eventEnded&&<p>{isEs?'Esta edición ya fue realizada.':'Esta edição já foi realizada.'}</p>}
+        </div>
+
+        {tickets.length?
+          <div class:list={['event-ticket-stage',ticketCount===1?'is-single':'is-multiple']}>
+            <div class:list={['event-ticket-grid',`count-${Math.min(ticketCount,4)}`]}>
+              {tickets.map((ticket:any,index:number)=><article class:list={['event-ticket-card',ticket.featured&&'featured',ticketCount===1&&'single-feature']} data-theme={ticket.theme||'light'}>
+                <div class="event-ticket-top">
+                  <span class="event-ticket-type">{ticketSequenceLabel(ticket,index)}</span>
+                  <span class="event-ticket-status">{availabilityLabels[ticket.availability as keyof typeof availabilityLabels]||ticket.availability}</span>
+                </div>
+                {ticket.copy.badge&&<span class="event-ticket-badge">{ticket.copy.badge}</span>}
+                <h3>{ticket.copy.title||ticket.name}</h3>
+                {ticket.copy.description&&<p class="event-ticket-desc">{ticket.copy.description}</p>}
+                <div class="event-ticket-price-wrap">
+                  {ticket.price_cents!=null&&Number(ticket.compare_price_cents)>Number(ticket.price_cents)&&<span class="event-ticket-compare">{money(ticket.compare_price_cents,ticket.currency||'BRL')}</span>}
+                  {ticket.price_cents!=null?<strong class="event-ticket-price">{money(ticket.price_cents,ticket.currency||'BRL')}</strong>:<strong class="event-ticket-price">{isEs?'CONSULTAR':'CONSULTE'}</strong>}
+                </div>
+                <span class="event-ticket-meta">{ticket.copy.meta||`${ticket.quantity||1} ${Number(ticket.quantity||1)>1?(isEs?'entradas':'ingressos'):(isEs?'entrada':'ingresso')}`}</span>
+                {ticket.copy.saving&&<span class="event-ticket-saving">{ticket.copy.saving}</span>}
+                {ticket.copy.note&&<p class="event-ticket-note">{ticket.copy.note}</p>}
+                {isPurchasable(ticket)?<div class="event-ticket-actions">
+                  {['whatsapp','both'].includes(ticket.purchase_mode)&&ticket.whatsapp&&<a class="event-ticket-action primary" href={ticket.whatsapp} target="_blank" rel="noopener" data-track={`ticket.whatsapp.${ticket.id}`}>{ticket.copy.buttonPrimary||'WhatsApp'}</a>}
+                  {['sympla','both'].includes(ticket.purchase_mode)&&ticket.sympla&&<a class:list={['event-ticket-action',ticket.purchase_mode==='sympla'&&'primary']} href={ticket.sympla} target="_blank" rel="noopener" data-track={`ticket.sympla.${ticket.id}`}>{ticket.purchase_mode==='both'?(ticket.copy.buttonSecondary||'Sympla'):(ticket.copy.buttonPrimary||'Sympla')}</a>}
+                  {ticket.purchase_mode==='custom'&&ticket.custom&&<a class="event-ticket-action primary" href={ticket.custom} target="_blank" rel="noopener" data-track={`ticket.custom.${ticket.id}`}>{ticket.copy.buttonPrimary||c.buyLabel}</a>}
+                </div>:<div class="event-ticket-unavailable">{ticket.availability==='sold_out'?(ticket.copy.soldOutLabel||availabilityLabels.sold_out):ticket.availability==='coming_soon'?(ticket.copy.lockedLabel||availabilityLabels.coming_soon):(availabilityLabels[ticket.availability as keyof typeof availabilityLabels]||ticket.availability)}</div>}
+              </article>)}
+            </div>
+
+            <aside class="event-ticket-guide">
+              <span class="event-ticket-guide-kicker">{isEs?'FORMAS DE COMPRA':'FORMAS DE COMPRA'}</span>
+              <h3>{ticketCount===1?(isEs?'ASEGURA TU ENTRADA.':'GARANTA SUA ENTRADA.'):(isEs?'ELIGE TU LOTE.':'ESCOLHA SEU LOTE.')}</h3>
+              <p>{ticketCount===1
+                ?(isEs?'Compra por el canal que prefieras y asegura tu acceso a esta edición.':'Compre pelo canal que preferir e garanta seu acesso a esta edição.')
+                :(isEs?'Compara las opciones disponibles y compra el lote que mejor funciona para tu noche.':'Compare as opções disponíveis e compre o lote que faz mais sentido para sua noite.')}</p>
+              <div class="event-ticket-guide-list">
+                {hasWhatsappTicket&&<div><span>01</span><strong>{isEs?'WhatsApp directo':'WhatsApp direto'}</strong><small>{isEs?'Compra directa, sin tasa de plataforma cuando esté disponible.':'Compra direta, sem taxa da plataforma quando disponível.'}</small></div>}
+                {hasSymplaTicket&&<div><span>{hasWhatsappTicket?'02':'01'}</span><strong>Sympla</strong><small>{isEs?'Compra a través de la plataforma Sympla.':'Compra pela plataforma Sympla.'}</small></div>}
+                {hasCustomTicket&&<div><span>{hasWhatsappTicket&&hasSymplaTicket?'03':(hasWhatsappTicket||hasSymplaTicket?'02':'01')}</span><strong>{isEs?'Canal oficial':'Canal oficial'}</strong><small>{isEs?'Compra por el canal oficial configurado para esta edición.':'Compra pelo canal oficial configurado para esta edição.'}</small></div>}
+              </div>
+              <div class="event-ticket-guide-meta">
+                <span>{ticketCount===1
+                  ?(Number(singleTicket?.quantity||1)>1?(isEs?`${singleTicket?.quantity} ENTRADAS`:`${singleTicket?.quantity} INGRESSOS`):(isEs?'ACCESO INDIVIDUAL':'ACESSO INDIVIDUAL'))
+                  :(isEs?`${ticketCount} OPCIONES DISPONIBLES`:`${ticketCount} OPÇÕES DISPONÍVEIS`)}</span>
+                <span>{isEs?'EDICIÓN OFICIAL GTRZ':'EDIÇÃO OFICIAL GTRZ'}</span>
+              </div>
+            </aside>
+          </div>
+        :<div class="event-empty-tickets">{c.noTickets}</div>}
+      </div>
+    </section>
+
+    {mapEmbed&&<section class="event-location-premium" data-section="event_location" data-section-theme={sectionTheme('location')} style={sectionStyle('location')}><div class="event-shell event-location-grid"><div class="event-location-copy"><span class="event-eyebrow">{isEs?'DÓNDE ES':'ONDE É'}</span><h2 class="event-display">{event.venue_name||event.city}</h2><div class="event-location-address">{event.venue_address||`${event.city}${event.state?` · ${event.state}`:''}`}</div><a class="event-map-button" href={mapLink} target="_blank" rel="noopener">{isEs?'ABRIR EN GOOGLE MAPS':'ABRIR NO GOOGLE MAPS'} ↗</a></div><div class="event-map-frame"><iframe transition:persist={`event-map-${event.slug}`} title={`${isEs?'Mapa de':'Mapa de'} ${event.venue_name||event.city}`} src={mapEmbed} loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe></div></div></section>}
+
+    <section class="event-terms-premium" data-section="event_terms" data-section-theme={sectionTheme('terms')} style={sectionStyle('terms')}>
+      <div class="event-shell event-terms-wrap">
+        <div class="event-terms-head">
+          <div>
+            <span class="event-eyebrow">{eventTerms.eyebrow}</span>
+            <h2 class="event-display">{eventTerms.title}</h2>
+          </div>
+          <p>{eventTerms.intro}</p>
+        </div>
+        <div class="event-terms-list">
+          {eventTerms.items.map((item,index)=>(
+            <details class="event-term-item">
+              <summary>
+                <span>{String(index+1).padStart(2,'0')}</span>
+                <strong>{item.title}</strong>
+                <i aria-hidden="true"></i>
+              </summary>
+              <div class="event-term-body"><p>{item.body}</p></div>
+            </details>
+          ))}
+        </div>
+        <p class="event-terms-accept">{eventTerms.accept}</p>
+      </div>
+    </section>
+
+    <section class="event-instagram-premium" data-section="event_instagram" data-section-theme={sectionTheme('instagram')} style={sectionStyle('instagram')}><div class="event-shell event-instagram-inner"><div><span class="event-eyebrow">INSTAGRAM</span><h2 class="event-display">{isEs?'SIGUE LA EDICIÓN.':'ACOMPANHE A EDIÇÃO.'}</h2></div><a class="event-instagram-button" href={instagram} target="_blank" rel="noopener" data-track="event.instagram">@gtrzeventos</a></div></section>
+
+    <EventFeedbackInvite locale={locale} eventName={loc?.title||event.slug} slug={event.slug} />
+
+    {firstPurchasable&&!eventEnded&&<div class="event-mobile-buy" data-event-mobile-buy aria-hidden="true">
+      <div>
+        <small>{loc?.title||event.slug}</small>
+        <strong>{firstPurchasable.price_cents!=null?money(firstPurchasable.price_cents,firstPurchasable.currency||'BRL'):(isEs?'ENTRADA DISPONIBLE':'INGRESSO DISPONÍVEL')}</strong>
+      </div>
+      <a href="#ingressos" data-track="event.mobile_buy">{isEs?'COMPRAR':'COMPRAR'}</a>
+    </div>}
+
+    <script src="/event-countdown.js" defer></script>
+    <script src="/event-mobile-buy.js" defer></script>
+  </main>:<main class="event-not-found-premium"><div class="event-shell"><span class="event-eyebrow">404</span><h1>{c.notFoundTitle}</h1><a href={`/?lang=${locale}`}>{c.notFoundCta}</a></div></main>}
+</SiteLayout>

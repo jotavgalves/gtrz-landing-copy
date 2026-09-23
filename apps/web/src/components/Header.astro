@@ -1,0 +1,245 @@
+---
+import type { ChromeSettings,Locale } from '@/lib/cms';
+const { locale, chrome={}, compact=false, instagramUrl='https://www.instagram.com/gtrzeventos/' } = Astro.props as { locale:Locale; chrome?:ChromeSettings; compact?:boolean; instagramUrl?:string };
+const es = locale === 'es';
+const defaultPt:[string,string][]=[['Sobre','#sobre'],['Ritmos','#ritmos'],['Diferenciais','#diferenciais'],['Quem faz','#quem'],['Trabalhe conosco','#trabalhe'],['Parcerias','#parcerias'],['Instagram','#instagram']];
+const defaultEs:[string,string][]=[['Sobre','#sobre'],['Ritmos','#ritmos'],['Diferenciales','#diferenciais'],['Quiénes somos','#quem'],['Trabaja con nosotros','#trabalhe'],['Alianzas','#parcerias'],['Instagram','#instagram']];
+const configured=es?chrome.navEs:chrome.navPt;
+const nav=Array.isArray(configured)&&configured.length?configured:(es?defaultEs:defaultPt);
+const onHome=Astro.url.pathname==='/'||Astro.url.pathname==='';
+const eventPathMatch=Astro.url.pathname.match(/^\/eventos\/[^/]+\/?$/);
+const eventPath=eventPathMatch?Astro.url.pathname.replace(/\/$/,''):'';
+const languagePtHref=eventPath||'?lang=pt-BR';
+const languageEsHref=eventPath?`/es${eventPath}`:'?lang=es';
+const homeUrl=`/?lang=${locale}`;
+const normalizeHref=(value:unknown)=>{
+  const href=String(value||'');
+  if(href.startsWith('#'))return onHome?href:`${homeUrl}${href}`;
+  if(href.startsWith('/'))return href;
+  return onHome?'#':homeUrl;
+};
+const safeNav=nav.filter(item=>Array.isArray(item)&&item.length>=2).map(([label,href])=>[String(label),normalizeHref(href)] as [string,string]);
+const eventsLabel=es?(chrome.eventsLabelEs||'Eventos'):(chrome.eventsLabelPt||'Eventos');
+const compactNav:[string,string][]=[
+  [eventsLabel,onHome?'#eventos':`${homeUrl}#eventos`],
+  ['Instagram',instagramUrl]
+];
+const langPt=chrome.langShortPt||'PT';
+const langEs=chrome.langShortEs||'ES';
+const brandHref=onHome?'#top':homeUrl;
+const eventsHref=onHome?'#eventos':`${homeUrl}#eventos`;
+const menuLabel=es?'Abrir navegación':'Abrir navegação';
+---
+<header class="header">
+  <div class="header-in">
+    <a class="brand" href={brandHref} aria-label="GTRZ Eventos" data-track="nav.logo">
+      <img class="brand-img" src="/brand/gtrz-wordmark.svg" alt="GTRZ" />
+    </a>
+    <nav class:list={['nav',compact&&'nav-compact']} aria-label={es ? 'Navegación principal' : 'Navegação principal'}>
+      {(compact?compactNav:safeNav).map(([label,href]) => <a href={href} target={compact&&label==='Instagram'?'_blank':undefined} rel={compact&&label==='Instagram'?'noreferrer':undefined}>{label}</a>)}
+    </nav>
+    <div class="nav-actions">
+      <div class="lang-switch" aria-label="Idioma">
+        <a class:list={{active:!es}} href={languagePtHref} data-language="pt-BR" data-astro-prefetch="viewport">{langPt}</a>
+        <a class:list={{active:es}} href={languageEsHref} data-language="es" data-astro-prefetch="viewport">{langEs}</a>
+      </div>
+      {!compact&&<a class="events-btn" href={eventsHref} data-track="nav.events">{eventsLabel}</a>}
+      <button class:list={['mobile-menu-button',compact&&'compact-menu-button']}  type="button" aria-expanded="false" aria-controls="mobileNav" aria-label={menuLabel} data-mobile-menu-button><span></span></button>
+    </div>
+  </div>
+  <div class="scroll-progress" aria-hidden="true"><span class="scroll-progress-bar" data-scroll-progress></span></div>
+</header>
+
+<div class="mobile-nav" id="mobileNav" data-mobile-nav data-open="false" aria-hidden="true">
+  <nav class="mobile-nav-links" aria-label={es ? 'Navegación móvil' : 'Navegação móvel'}>
+    {(compact?compactNav:safeNav).map(([label,href]) => <a href={href} target={compact&&label==='Instagram'?'_blank':undefined} rel={compact&&label==='Instagram'?'noreferrer':undefined} data-mobile-nav-link><span>{label}</span><svg class="mobile-nav-link-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h9M8.5 4.5 12 8l-3.5 3.5"/></svg></a>)}
+  </nav>
+  {!compact&&<div class="mobile-nav-actions">
+    <a class="mobile-nav-events" href={eventsHref} data-track="nav.events.mobile" data-mobile-nav-link>{eventsLabel}</a>
+  </div>}
+</div>
+
+<script>
+  import { navigate } from 'astro:transitions/client';
+
+  const languageScrollKey = 'gtrz_language_scroll';
+  const languageSwitchClass = 'gtrz-language-switching';
+
+  const storeLanguage = (value: string | null) => {
+    try { localStorage.setItem('gtrz_locale', value || 'pt-BR'); } catch {}
+  };
+
+  const restoreLanguageScroll = () => {
+    try {
+      const saved = sessionStorage.getItem(languageScrollKey);
+      if (saved === null) return;
+      sessionStorage.removeItem(languageScrollKey);
+      const y = Number(saved);
+      if (Number.isFinite(y)) requestAnimationFrame(() => scrollTo({top:y,left:0,behavior:'instant' as ScrollBehavior}));
+    } catch {}
+  };
+
+  type ScrollProgressState = {
+    current:number;
+    target:number;
+    raf:number;
+  };
+
+  const getScrollProgressState = ():ScrollProgressState => {
+    const win = window as any;
+    if (!win.__gtrzScrollProgressState) {
+      win.__gtrzScrollProgressState = { current:0, target:0, raf:0 };
+    }
+    return win.__gtrzScrollProgressState as ScrollProgressState;
+  };
+
+  const scrollProgressValue = () => {
+    const doc = document.documentElement;
+    const max = Math.max(1, doc.scrollHeight - innerHeight);
+    return Math.min(1, Math.max(0, scrollY / max));
+  };
+
+  const updateScrollProgress = (immediate=false) => {
+    const state = getScrollProgressState();
+    state.target = scrollProgressValue();
+
+    if (immediate) {
+      state.current = state.target;
+      const bar = document.querySelector<HTMLElement>('[data-scroll-progress]');
+      if (bar) bar.style.transform = `scaleX(${state.current})`;
+      return;
+    }
+
+    if (state.raf) return;
+
+    const animate = () => {
+      const bar = document.querySelector<HTMLElement>('[data-scroll-progress]');
+      if (!bar) {
+        state.raf = 0;
+        return;
+      }
+
+      const delta = state.target - state.current;
+      state.current += delta * .22;
+
+      if (Math.abs(delta) < .00035) {
+        state.current = state.target;
+        bar.style.transform = `scaleX(${state.current})`;
+        state.raf = 0;
+        return;
+      }
+
+      bar.style.transform = `scaleX(${state.current})`;
+      state.raf = requestAnimationFrame(animate);
+    };
+
+    state.raf = requestAnimationFrame(animate);
+  };
+
+  const bindHeader = () => {
+    document.querySelectorAll<HTMLAnchorElement>('[data-language]').forEach((el) => {
+      if (el.dataset.languageBound === '1') return;
+      el.dataset.languageBound = '1';
+
+      const warmLanguage = () => {
+        if (el.dataset.languageWarmed === '1' || el.classList.contains('active')) return;
+        el.dataset.languageWarmed = '1';
+        try {
+          const href = new URL(el.href, location.href).toString();
+          fetch(href,{credentials:'same-origin',cache:'force-cache'}).catch(()=>{});
+        } catch {}
+      };
+
+      el.addEventListener('pointerenter', warmLanguage, {passive:true});
+      el.addEventListener('touchstart', warmLanguage, {passive:true,once:true});
+
+      el.addEventListener('click', (event) => {
+        if (el.classList.contains('active')) {
+          event.preventDefault();
+          return;
+        }
+
+        event.preventDefault();
+        storeLanguage(el.getAttribute('data-language'));
+        try { sessionStorage.setItem(languageScrollKey, String(scrollY)); } catch {}
+
+        document.documentElement.classList.add(languageSwitchClass);
+        el.setAttribute('aria-busy','true');
+
+        const href = new URL(el.href, location.href).toString();
+        navigate(href,{
+          history:'push',
+          sourceElement:el,
+          info:{languageSwitch:true}
+        });
+      });
+    });
+
+    const idle = (window as any).requestIdleCallback || ((cb:()=>void)=>setTimeout(cb,180));
+    idle(() => {
+      document.querySelectorAll<HTMLAnchorElement>('[data-language]:not(.active)').forEach((el) => {
+        if (el.dataset.languageWarmed === '1') return;
+        el.dataset.languageWarmed = '1';
+        try {
+          fetch(new URL(el.href,location.href).toString(),{credentials:'same-origin',cache:'force-cache'}).catch(()=>{});
+        } catch {}
+      });
+    });
+
+    const menuButton = document.querySelector<HTMLButtonElement>('[data-mobile-menu-button]');
+    const mobileNav = document.querySelector<HTMLElement>('[data-mobile-nav]');
+    if (menuButton && mobileNav && menuButton.dataset.menuBound !== '1') {
+      menuButton.dataset.menuBound = '1';
+      const setMenu = (open: boolean) => {
+        menuButton.setAttribute('aria-expanded', String(open));
+        mobileNav.dataset.open = String(open);
+        mobileNav.setAttribute('aria-hidden', String(!open));
+        document.body.classList.toggle('mobile-nav-open', open);
+      };
+      menuButton.addEventListener('click', () => setMenu(menuButton.getAttribute('aria-expanded') !== 'true'));
+      mobileNav.querySelectorAll<HTMLElement>('[data-mobile-nav-link]').forEach((link) => link.addEventListener('click', () => setMenu(false)));
+    }
+  };
+
+  bindHeader();
+  restoreLanguageScroll();
+  updateScrollProgress(true);
+
+  if (!(window as any).__gtrzHeaderLifecycleBound) {
+    (window as any).__gtrzHeaderLifecycleBound = true;
+    document.addEventListener('astro:after-swap', () => {
+      restoreLanguageScroll();
+      updateScrollProgress(true);
+      document.documentElement.classList.remove(languageSwitchClass);
+    });
+    document.addEventListener('astro:page-load', () => {
+      bindHeader();
+      restoreLanguageScroll();
+      updateScrollProgress(true);
+      document.documentElement.classList.remove(languageSwitchClass);
+      document.querySelectorAll('[data-language][aria-busy="true"]').forEach((el)=>el.removeAttribute('aria-busy'));
+    });
+    addEventListener('scroll', () => updateScrollProgress(false), {passive:true});
+    addEventListener('resize', () => updateScrollProgress(true), {passive:true});
+    addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape') return;
+      const button = document.querySelector<HTMLButtonElement>('[data-mobile-menu-button]');
+      const nav = document.querySelector<HTMLElement>('[data-mobile-nav]');
+      if (!button || !nav) return;
+      button.setAttribute('aria-expanded','false');
+      nav.dataset.open='false';
+      nav.setAttribute('aria-hidden','true');
+      document.body.classList.remove('mobile-nav-open');
+    });
+    addEventListener('resize', () => {
+      if (innerWidth <= 700) return;
+      const button = document.querySelector<HTMLButtonElement>('[data-mobile-menu-button]');
+      const nav = document.querySelector<HTMLElement>('[data-mobile-nav]');
+      if (!button || !nav) return;
+      button.setAttribute('aria-expanded','false');
+      nav.dataset.open='false';
+      nav.setAttribute('aria-hidden','true');
+      document.body.classList.remove('mobile-nav-open');
+    }, {passive:true});
+  }
+</script>

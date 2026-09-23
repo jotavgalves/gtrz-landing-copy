@@ -1,0 +1,35 @@
+name: GTRZ Platform CI
+
+on:
+  push:
+    branches:
+      - main
+      - rebuild/gtrz-platform-v1
+  pull_request:
+    paths:
+      - 'apps/**'
+      - 'packages/**'
+      - 'migrations/**'
+      - 'package.json'
+      - 'pnpm-workspace.yaml'
+      - 'tsconfig.base.json'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Build
+        run: pnpm build

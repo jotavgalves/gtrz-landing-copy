@@ -1,0 +1,46 @@
+---
+const {locale,content={}}=Astro.props;
+const es=locale==='es';
+const c={
+  eyebrow:es?'Síguenos de cerca':'Acompanhe de perto',
+  title:es?'SIGUE A GTRZ EN INSTAGRAM.':'SIGA A GTRZ NO INSTAGRAM.',
+  body:es?'Nuevos eventos, backstage, line-ups, lotes, registros de las fiestas y todo lo que ocurre antes y después de la pista.':'Novos eventos, bastidores, line-ups, lotes, registros das festas e tudo que acontece antes e depois da pista.',
+  handle:'@gtrzeventos',url:'https://instagram.com/gtrzeventos',
+  cta:es?'Seguir en Instagram':'Seguir no Instagram',
+  embedFallback:es?'Abrir @gtrzeventos en Instagram':'Abrir @gtrzeventos no Instagram',
+  ...content
+};
+const parts=String(c.title).trim().split(/\s+/);const accent=parts.pop()||'';const lead=parts.join(' ');
+const embedUrl=String(c.url||'https://instagram.com/gtrzeventos').replace('://instagram.com','://www.instagram.com').replace(/\/?$/,'/');
+---
+<section id="instagram" class="instagram instagram-native" data-section="instagram">
+  <div class="wrap">
+    <div class="insta-card reveal">
+      <div class="insta-copy">
+        <div class="eyebrow">{c.eyebrow}</div>
+        <h2 class="display">{lead} <span class="red">{accent}</span></h2>
+        <p>{c.body}</p>
+        <div class="insta-handle">{c.handle}</div>
+        <div class="hero-actions">
+          <a class="btn btn-red insta-follow-btn" href={c.url} rel="noopener" target="_blank" data-track="instagram.follow">
+            <span class="insta-gradient-icon" aria-hidden="true"><i></i></span>
+            <span class="insta-follow-label">{c.cta}</span>
+          </a>
+        </div>
+      </div>
+
+      <div class="insta-native-frame">
+        <div class="insta-native-embed">
+          <blockquote
+            class="instagram-media"
+            data-instgrm-permalink={embedUrl}
+            data-instgrm-version="14"
+          >
+            <a href={c.url} target="_blank" rel="noopener">{c.embedFallback}</a>
+          </blockquote>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script is:inline async src="https://www.instagram.com/embed.js"></script>
+</section>

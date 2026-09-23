@@ -1,0 +1,214 @@
+---
+import Header from '@/components/Header.astro';
+import { ClientRouter } from 'astro:transitions';
+import LanguageGate from '@/components/LanguageGate.astro';
+import GtrzFooter from '@/components/GtrzFooter.astro';
+import type { SiteSettings } from '@/lib/cms';
+import '@/styles/global.css';
+import '@/styles/pages.css';
+import '@/styles/popup.css';
+import '@/styles/institutional.css';
+import '@/styles/prototype-v3.css';
+import '@/styles/hero-premium.css';
+import '@/styles/about-premium.css';
+import '@/styles/rhythms-premium.css';
+import '@/styles/differentials-premium.css';
+import '@/styles/events-premium.css';
+import '@/styles/team-premium.css';
+import '@/styles/instagram-native.css';
+import '@/styles/ticket-channel-public.css';
+import '@/styles/event-error.css';
+import '@/styles/mobile-hardening.css';
+import '@/styles/mobile-polish.css';
+import '@/styles/partnerships-mobile-fix.css';
+import '@/styles/privacy-checkbox-fix.css';
+interface Props {
+  title?: string;
+  description?: string;
+  locale: 'pt-BR' | 'es';
+  settings?:SiteSettings;
+  canonicalUrl?: string;
+  alternatePtUrl?: string;
+  alternateEsUrl?: string;
+  ogImage?: string;
+  ogImageAlt?: string;
+  socialType?: 'website' | 'article';
+}
+const {
+  locale,
+  settings={},
+  canonicalUrl,
+  alternatePtUrl,
+  alternateEsUrl,
+  ogImage,
+  ogImageAlt,
+  socialType='website'
+} = Astro.props;
+const chrome=settings.chrome||{};
+const hubMode=settings.general?.homepageMode!=='full';
+const eventPopupHandoffEnabled=Astro.url.pathname==='/'&&!hubMode;
+const instagramUrl=typeof settings.social?.instagram==='string'
+  ?String(settings.social.instagram)
+  :typeof settings.social?.instagramUrl==='string'
+    ?String(settings.social.instagramUrl)
+    :'https://www.instagram.com/gtrzeventos/';
+const title=Astro.props.title||(locale==='es'?(chrome.metaTitleEs||'GTRZ Eventos'):(chrome.metaTitlePt||'GTRZ Eventos'));
+const legacyCountryFocus=/Venezuela.*Brasil|Brasil.*Venezuela/i;
+const configuredDescription=locale==='es'?chrome.metaDescriptionEs:chrome.metaDescriptionPt;
+const defaultDescription=configuredDescription&&!legacyCountryFocus.test(configuredDescription)
+  ?configuredDescription
+  :(locale==='es'?'GTRZ Eventos — fiestas, música y experiencias para una comunidad latina multicultural.':'GTRZ Eventos — festas, música e experiências para uma comunidade latina multicultural.');
+const description=Astro.props.description||defaultDescription;
+const absoluteOgImage=ogImage?new URL(ogImage,Astro.url.origin).toString():'';
+const socialLocale=locale==='es'?'es_ES':'pt_BR';
+const socialLocaleAlternate=locale==='es'?'pt_BR':'es_ES';
+const apiBase = import.meta.env.PUBLIC_API_BASE || '';
+---
+<!doctype html>
+<html lang={locale === 'es' ? 'es' : 'pt-BR'} data-event-popup-handoff={eventPopupHandoffEnabled?'1':undefined}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <meta name="theme-color" content="#080808" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="description" content={description} />
+    {canonicalUrl&&<link rel="canonical" href={canonicalUrl} />}
+    {alternatePtUrl&&<link rel="alternate" hreflang="pt-BR" href={alternatePtUrl} />}
+    {alternateEsUrl&&<link rel="alternate" hreflang="es" href={alternateEsUrl} />}
+    {alternatePtUrl&&<link rel="alternate" hreflang="x-default" href={alternatePtUrl} />}
+
+    <meta property="og:type" content={socialType} />
+    <meta property="og:site_name" content="GTRZ Eventos" />
+    <meta property="og:locale" content={socialLocale} />
+    <meta property="og:locale:alternate" content={socialLocaleAlternate} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    {canonicalUrl&&<meta property="og:url" content={canonicalUrl} />}
+    {absoluteOgImage&&<meta property="og:image" content={absoluteOgImage} />}
+    {absoluteOgImage&&<meta property="og:image:secure_url" content={absoluteOgImage} />}
+    {absoluteOgImage&&<meta property="og:image:alt" content={ogImageAlt||title} />}
+
+    <meta name="twitter:card" content={absoluteOgImage?'summary_large_image':'summary'} />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    {absoluteOgImage&&<meta name="twitter:image" content={absoluteOgImage} />}
+    {absoluteOgImage&&<meta name="twitter:image:alt" content={ogImageAlt||title} />}
+    <title>{title}</title>
+    <ClientRouter />
+    <style is:inline>
+      html.gtrz-popup-handoff{background:#080808}
+      html[data-event-popup-handoff="1"].gtrz-popup-handoff body{visibility:hidden}
+      html[data-event-popup-handoff="1"].gtrz-popup-handoff body .event-popup{visibility:visible}
+      ::view-transition-old(root){animation:150ms cubic-bezier(.4,0,1,1) both gtrz-page-out}
+      ::view-transition-new(root){animation:260ms cubic-bezier(.16,1,.3,1) both gtrz-page-in}
+      @keyframes gtrz-page-out{to{opacity:.18}}
+      @keyframes gtrz-page-in{from{opacity:.18}}
+      html.gtrz-language-switching{cursor:progress}
+      html.gtrz-language-switching .lang-switch{pointer-events:none}
+      html.gtrz-language-switching .lang-switch a[aria-busy="true"]{background:#fff;color:#111}
+      html.gtrz-language-switching body:after{
+        content:"";
+        position:fixed;
+        z-index:99999;
+        left:0;
+        top:0;
+        width:100%;
+        height:2px;
+        pointer-events:none;
+        background:linear-gradient(90deg,#ff1a12 0%,#ff1a12 62%,rgba(255,26,18,0) 100%);
+        transform-origin:left center;
+        animation:gtrz-language-progress .75s cubic-bezier(.2,.8,.2,1) both;
+      }
+      @keyframes gtrz-language-progress{
+        from{transform:scaleX(.08);opacity:.7}
+        to{transform:scaleX(1);opacity:1}
+      }
+      @media(prefers-reduced-motion:reduce){
+        ::view-transition-old(root),::view-transition-new(root){animation:none}
+        html.gtrz-language-switching body:after{animation:none;transform:scaleX(1)}
+      }
+    </style>
+    <script is:inline define:vars={{eventPopupHandoffEnabled}}>
+      try {
+        if (!eventPopupHandoffEnabled) {
+          sessionStorage.removeItem('gtrz_language_handoff');
+          document.documentElement.classList.remove('gtrz-popup-handoff');
+        } else if (sessionStorage.getItem('gtrz_language_handoff') === '1') {
+          document.documentElement.classList.add('gtrz-popup-handoff');
+        }
+      } catch {}
+    </script>
+  </head>
+  <body>
+    <Header locale={locale} chrome={chrome} compact={hubMode} instagramUrl={instagramUrl} />
+    {!hubMode&&Astro.url.pathname==='/'&&<LanguageGate locale={locale} chrome={chrome} />}
+    <slot />
+    <GtrzFooter locale={locale} settings={settings} />
+    <script is:inline>
+      (()=>{
+        const forbidden=/[\p{Extended_Pictographic}\uFE0F\u2190-\u21FF]/gu;
+        const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
+        let node;
+        while((node=walker.nextNode())){
+          const parent=node.parentElement;
+          if(!parent||['SCRIPT','STYLE','NOSCRIPT'].includes(parent.tagName)) continue;
+          if(forbidden.test(node.nodeValue||'')) node.nodeValue=(node.nodeValue||'').replace(forbidden,'');
+          forbidden.lastIndex=0;
+        }
+      })();
+    </script>
+    <script src="/name-input-hardening.js" defer></script>
+    <script define:vars={{ apiBase, locale }}>
+      const sessionKey = 'gtrz_session_id';
+      const attributionKey = 'gtrz_attribution';
+      let sessionId = localStorage.getItem(sessionKey);
+      if (!sessionId) { sessionId = crypto.randomUUID(); localStorage.setItem(sessionKey, sessionId); }
+      const params = new URLSearchParams(location.search);
+      const incoming = {
+        utmSource: params.get('utm_source') || undefined,
+        utmMedium: params.get('utm_medium') || undefined,
+        utmCampaign: params.get('utm_campaign') || undefined,
+        utmContent: params.get('utm_content') || undefined,
+        trackingLink: params.get('gtrz_link') || undefined
+      };
+      let storedAttribution = {};
+      try { storedAttribution = JSON.parse(sessionStorage.getItem(attributionKey) || '{}'); } catch {}
+      const hasIncoming = Object.values(incoming).some(Boolean);
+      const acquisition = hasIncoming ? incoming : storedAttribution;
+      if (hasIncoming) sessionStorage.setItem(attributionKey, JSON.stringify(incoming));
+      const send = (eventName, extra = {}) => {
+        const payload = JSON.stringify({ eventName, path: location.pathname, language: locale, referrer: document.referrer || undefined, sessionId, ...acquisition, ...extra });
+        const url = `${apiBase}/api/analytics/collect`;
+        if (navigator.sendBeacon) navigator.sendBeacon(url, new Blob([payload], {type:'application/json'}));
+        else fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:payload,keepalive:true}).catch(()=>{});
+      };
+      window.gtrzTrack = send;
+      send('page_view');
+      document.addEventListener('click', (event) => {
+        const el = event.target.closest('[data-track]');
+        if (el) send(el.dataset.trackEvent || 'cta_click',{ element: el.dataset.track, section: el.closest('[data-section]')?.dataset.section });
+      });
+      const viewed = new Set();
+      const sectionObserver = new IntersectionObserver((entries) => entries.forEach((entry) => {
+        if (entry.isIntersecting && entry.intersectionRatio >= .35) {
+          const name = entry.target.dataset.section;
+          if (name && !viewed.has(name)) { viewed.add(name); send('section_view',{section:name}); }
+        }
+      }),{threshold:[.35]});
+      document.querySelectorAll('[data-section]').forEach((el)=>sectionObserver.observe(el));
+      const revealObserver = new IntersectionObserver((entries) => entries.forEach((entry) => {
+        if (entry.isIntersecting) { entry.target.classList.add('in'); revealObserver.unobserve(entry.target); }
+      }), { threshold: .12 });
+      document.querySelectorAll('.reveal').forEach((el) => revealObserver.observe(el));
+      const progress = document.querySelector('[data-scroll-progress]');
+      const fired = new Set();
+      const onScroll = () => {
+        const max = document.documentElement.scrollHeight - innerHeight;
+        const pct = max > 0 ? Math.min(100, Math.max(0, scrollY / max * 100)) : 0;
+        if (progress) progress.style.width = `${pct}%`;
+        [25,50,75,100].forEach((mark)=>{ if(pct >= mark && !fired.has(mark)){ fired.add(mark); send(`scroll_${mark}`); } });
+      };
+      addEventListener('scroll',onScroll,{passive:true}); onScroll();
+    </script>
+  </body>
+</html>

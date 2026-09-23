@@ -1,0 +1,326 @@
+---
+import type { ChromeSettings,Locale } from '@/lib/cms';
+const { locale, chrome={}, mode='default' } = Astro.props as { locale:Locale; chrome?:ChromeSettings; mode?:'default'|'hub' };
+const es=locale==='es';
+const legacyCountryFocus=/Venezuela.*Brasil|Brasil.*Venezuela/i;
+const configuredEyebrow=es?(chrome.gateEyebrowEs||chrome.gateEyebrow):(chrome.gateEyebrowPt||chrome.gateEyebrow);
+const eyebrow=configuredEyebrow&&!legacyCountryFocus.test(configuredEyebrow)
+  ?configuredEyebrow
+  :(es?'GTRZ · EXPERIENCIA LATINA':'GTRZ · EXPERIÊNCIA LATINA');
+const titlePrefix=es?(chrome.gateTitlePrefixEs||'¿CÓMO QUIERES'):(chrome.gateTitlePrefixPt||chrome.gateTitlePrefix||'COMO VOCÊ QUER');
+const titleHighlight=es?(chrome.gateTitleHighlightEs||'ENTRAR?'):(chrome.gateTitleHighlightPt||chrome.gateTitleHighlight||'ENTRAR?');
+const body=es?(chrome.gateBodyEs||'Elige el idioma de la experiencia.'):(chrome.gateBodyPt||'Escolha o idioma da experiência.');
+const hint=es?(chrome.gateHintEs||'Puedes cambiar el idioma nuevamente en el menú.'):(chrome.gateHintPt||'Você pode mudar o idioma novamente no menu do site.');
+const optionPt=chrome.gateOptionPt||'Português';
+const optionEs=chrome.gateOptionEs||'Español';
+---
+<div class="language-gate" data-language-gate hidden aria-hidden="true">
+  <div class="language-card" role="dialog" aria-modal="true" aria-labelledby="languageTitle">
+    <img src="/brand/gtrz-full.svg" alt="GTRZ Eventos" />
+    <div class="eyebrow">{eyebrow}</div>
+    <h2 class="display" id="languageTitle">{titlePrefix}<br/><span class="red">{titleHighlight}</span></h2>
+    <p>{body}</p>
+    <div class="language-options">
+      <a href="?lang=pt-BR" data-first-language="pt-BR">{optionPt}</a>
+      <a href="?lang=es" data-first-language="es">{optionEs}</a>
+    </div>
+    <p class="language-hint">{hint}</p>
+  </div>
+</div>
+<script define:vars={{mode,locale}}>
+  const gate = document.querySelector('[data-language-gate]');
+  const isHomepage = location.pathname === '/' || location.pathname === '';
+  let saved = null;
+  let seenEver = false;
+  let firstVisitRedirect = false;
+
+  try {
+    saved = localStorage.getItem('gtrz_locale');
+    seenEver = localStorage.getItem('gtrz_language_gate_seen') === '1';
+    firstVisitRedirect = sessionStorage.getItem('gtrz_language_first_visit_redirect') === '1';
+
+    // Existing visitors may already have a saved locale from the previous flow.
+    // Treat that as a completed language choice so they are not interrupted again.
+    if (saved && !seenEver) {
+      localStorage.setItem('gtrz_language_gate_seen','1');
+      seenEver = true;
+    }
+  } catch {}
+
+  const params = new URLSearchParams(location.search);
+  const explicitLanguage = params.has('lang');
+  const currentLocale = locale === 'es' ? 'es' : 'pt-BR';
+  const browserLocale = (() => {
+    const languages = Array.isArray(navigator.languages) && navigator.languages.length
+      ? navigator.languages
+      : [navigator.language || ''];
+    return languages.some((value) => String(value).toLowerCase().startsWith('es')) ? 'es' : 'pt-BR';
+  })();
+
+  const redirectToLocale = (target) => {
+    if (!isHomepage || target === currentLocale) return false;
+    const next = new URL(location.href);
+    if (target === 'es') next.searchParams.set('lang','es');
+    else next.searchParams.set('lang','pt-BR');
+    location.replace(next.toString());
+    return true;
+  };
+
+  if (isHomepage) {
+    if (!seenEver && !saved && !explicitLanguage) {
+      // First absolute visit: render in the browser language, then show the
+      // one-time selector so the visitor can confirm or change it.
+      if (browserLocale !== currentLocale) {
+        try { sessionStorage.setItem('gtrz_language_first_visit_redirect','1'); } catch {}
+        redirectToLocale(browserLocale);
+      }
+    } else if (seenEver && !explicitLanguage && saved && saved !== currentLocale) {
+      // Returning visitor: open immediately in the last language used.
+      redirectToLocale(saved);
+    } else if (explicitLanguage && !firstVisitRedirect) {
+      // A language-explicit shared URL is already a clear preference.
+      try {
+        localStorage.setItem('gtrz_locale',currentLocale);
+        localStorage.setItem('gtrz_language_gate_seen','1');
+      } catch {}
+      seenEver = true;
+    }
+  }
+
+  const shouldOpen = isHomepage && !seenEver && (!explicitLanguage || firstVisitRedirect);
+
+  if (shouldOpen && gate) {
+    gate.hidden = false;
+    gate.removeAttribute('hidden');
+    gate.setAttribute('aria-hidden','false');
+    document.body.classList.add('modal-open');
+  }
+
+  document.querySelectorAll('[data-first-language]').forEach((el)=>el.addEventListener('click',()=>{
+    try {
+      localStorage.setItem('gtrz_locale',el.dataset.firstLanguage || 'pt-BR');
+      localStorage.setItem('gtrz_language_gate_seen','1');
+      sessionStorage.removeItem('gtrz_language_first_visit_redirect');
+      sessionStorage.removeItem('gtrz_language_gate_seen');
+      if (mode === 'hub') sessionStorage.removeItem('gtrz_language_handoff');
+      else sessionStorage.setItem('gtrz_language_handoff','1');
+    } catch {}
+    if (mode !== 'hub') document.documentElement.classList.add('gtrz-popup-handoff');
+    document.body.classList.remove('modal-open');
+  }));
+</script>
+
+<style>
+  :global(body.modal-open){overflow:hidden}
+  .language-gate{
+    position:fixed;
+    inset:0;
+    z-index:260;
+    display:grid;
+    place-items:center;
+    background:#080808;
+    color:#fff;
+    opacity:1;
+    visibility:visible;
+  }
+  .language-gate[hidden]{display:none}
+  .language-card{
+    text-align:center;
+    padding:46px 34px 38px;
+    border:1px solid rgba(255,255,255,.12);
+    border-radius:30px;
+    background:
+      radial-gradient(80% 70% at 50% 0%,rgba(255,26,18,.18),transparent 68%),
+      #0b0b0b;
+    box-shadow:0 28px 90px rgba(0,0,0,.48);
+  }
+  .language-card img{
+    width:min(210px,55%);
+    margin:0 auto 34px;
+  }
+  .language-card .eyebrow{
+    margin-bottom:14px;
+    color:#9a918d;
+    font-size:.68rem;
+    font-weight:900;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+  }
+  .language-card h2{
+    margin:0;
+    font-family:'Barlow Condensed','Arial Narrow',sans-serif;
+    font-size:clamp(4rem,9vw,7rem);
+    font-weight:900;
+    line-height:.84;
+    letter-spacing:-.035em;
+    text-transform:uppercase;
+  }
+  .language-card .red{color:#ff241a}
+  .language-card>p:not(.language-hint){
+    max-width:520px;
+    margin:22px auto 28px;
+    color:#968d89;
+    line-height:1.7;
+  }
+  .language-options{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+  }
+  .language-options a{
+    border:1px solid rgba(255,255,255,.15);
+    background:#111;
+    color:#fff;
+    font-weight:900;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    transition:.2s ease;
+  }
+  .language-options a:hover{
+    border-color:#ff241a;
+    background:#ff241a;
+  }
+  .language-hint{
+    margin:18px 0 0;
+    color:#5f5754;
+    font-size:.7rem;
+    line-height:1.5;
+  }
+
+  .language-gate{
+    min-height:100vh;
+    min-height:100dvh;
+    overflow-y:auto;
+    overscroll-behavior:contain;
+    padding:
+      max(20px,env(safe-area-inset-top))
+      max(20px,env(safe-area-inset-right))
+      max(20px,env(safe-area-inset-bottom))
+      max(20px,env(safe-area-inset-left));
+  }
+  .language-card{
+    position:relative;
+    width:min(660px,100%);
+    max-height:calc(100dvh - 40px);
+    overflow:auto;
+    overscroll-behavior:contain;
+  }
+  .language-options a{
+    min-height:52px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    touch-action:manipulation;
+    -webkit-tap-highlight-color:transparent;
+    user-select:none;
+  }
+
+  @media(max-width:700px){
+    .language-gate{
+      place-items:end center;
+      padding:
+        max(12px,env(safe-area-inset-top))
+        max(12px,env(safe-area-inset-right))
+        max(12px,env(safe-area-inset-bottom))
+        max(12px,env(safe-area-inset-left));
+      background:rgba(0,0,0,.88);
+      backdrop-filter:blur(12px);
+      -webkit-backdrop-filter:blur(12px);
+    }
+    .language-card{
+      width:100%;
+      max-width:none;
+      max-height:calc(100dvh - max(24px,env(safe-area-inset-top)) - max(24px,env(safe-area-inset-bottom)));
+      border-radius:24px;
+      padding:22px 18px 18px;
+    }
+    .language-card img{
+      width:112px;
+      max-width:34vw;
+    }
+    .language-card .eyebrow{
+      margin-top:18px;
+      font-size:.62rem;
+      line-height:1.35;
+      letter-spacing:.13em;
+    }
+    .language-card h2{
+      margin:12px 0 10px;
+      font-size:clamp(2.65rem,13vw,4.15rem);
+      line-height:.86;
+      letter-spacing:-.035em;
+    }
+    .language-card>p:not(.language-hint){
+      margin:0 0 18px;
+      font-size:.94rem;
+      line-height:1.5;
+    }
+    .language-card>div.language-options{
+      display:grid;
+      grid-template-columns:1fr;
+      gap:10px;
+    }
+    .language-options a{
+      min-height:56px;
+      padding:0 18px;
+      border-radius:16px;
+      font-size:.78rem;
+      letter-spacing:.08em;
+    }
+    .language-hint{
+      margin:14px 2px 0;
+      font-size:.72rem;
+      line-height:1.45;
+      color:#777;
+    }
+  }
+
+  @media(max-width:380px){
+    .language-card{
+      padding:18px 15px 15px;
+      border-radius:20px;
+    }
+    .language-card h2{
+      font-size:clamp(2.35rem,12.5vw,3.35rem);
+    }
+    .language-options a{
+      min-height:54px;
+    }
+  }
+
+  @media(max-height:650px) and (max-width:700px){
+    .language-gate{
+      place-items:center;
+    }
+    .language-card{
+      padding-top:16px;
+      padding-bottom:14px;
+    }
+    .language-card img{
+      width:92px;
+    }
+    .language-card .eyebrow{
+      margin-top:12px;
+    }
+    .language-card h2{
+      margin:8px 0;
+      font-size:clamp(2.15rem,10.5vw,3rem);
+    }
+    .language-card>p:not(.language-hint){
+      margin-bottom:12px;
+      font-size:.86rem;
+    }
+    .language-options a{
+      min-height:50px;
+    }
+    .language-hint{
+      margin-top:10px;
+      font-size:.66rem;
+    }
+  }
+
+  @media(prefers-reduced-motion:reduce){
+    .language-gate,.language-card{scroll-behavior:auto}
+  }
+</style>
+

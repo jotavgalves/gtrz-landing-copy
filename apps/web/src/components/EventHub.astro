@@ -1,0 +1,863 @@
+---
+import type { CmsEvent,Locale,SiteSettings } from '@/lib/cms';
+import { API_BASE } from '@/lib/api';
+import LanguageGate from '@/components/LanguageGate.astro';
+import GtrzFooter from '@/components/GtrzFooter.astro';
+
+const {events,locale,siteSettings={}}=Astro.props as {events:CmsEvent[];locale:Locale;siteSettings?:SiteSettings};
+const es=locale==='es';
+const instagram=typeof siteSettings.social?.instagram==='string'&&siteSettings.social.instagram
+  ?String(siteSettings.social.instagram)
+  :'https://instagram.com/gtrzeventos';
+const activeEvents=events.filter(event=>['published','sales_open','sold_out'].includes(event.status)).slice(0,6);
+const marqueeText='GTRZ · JOÃO PESSOA · RECIFE · LATIN MUSIC · EXPERIÊNCIAS ·';
+const marqueeItems=Array.from({length:10});
+
+const copy=es?{
+  navEvents:'Eventos',
+  navInstagram:'Instagram',
+  navSuggestions:'Sugerencias',
+  eyebrow:'AGENDA OFICIAL GTRZ',
+  titleTop:'PRÓXIMAS',
+  titleBottom:'NOCHES',
+  intro:'Cada evento tiene una identidad propia. Elige dónde nos encontramos.',
+  listLabel:'PRÓXIMOS EVENTOS',
+  view:'VER EVENTO',
+  coming:'PRÓXIMAMENTE',
+  sales:'ENTRADAS DISPONIBLES',
+  sold:'AGOTADO',
+  emptyTitle:'NUEVAS FECHAS EN CAMINO',
+  emptyBody:'Sigue a GTRZ para recibir primero los próximos anuncios.',
+  emptyCta:'SEGUIR EN INSTAGRAM',
+  feedbackEyebrow:'TU OPINIÓN',
+  feedbackTitle:'AYÚDANOS A HACERLO MEJOR.',
+  feedbackBody:'Ideas, críticas y sugerencias sobre nuestras fiestas. También puedes enviarlo de forma anónima.',
+  feedbackCta:'ENVIAR SUGERENCIA',
+  freelancerEyebrow:'OPORTUNIDADES',
+  freelancerTitle:'SÉ PARTE DE LAS PRÓXIMAS PRODUCCIONES.',
+  freelancerBody:'Estamos ampliando nuestra base de freelancers para los eventos GTRZ.',
+  freelancerCta:'REGISTRO DE FREELANCERS',
+  footer:'GTRZ EVENTOS · CULTURA LATINA EN MOVIMIENTO'
+}:{
+  navEvents:'Eventos',
+  navInstagram:'Instagram',
+  navSuggestions:'Sugestões',
+  eyebrow:'AGENDA OFICIAL GTRZ',
+  titleTop:'PRÓXIMAS',
+  titleBottom:'NOITES',
+  intro:'Cada evento tem uma identidade própria. Escolha onde a GTRZ te encontra.',
+  listLabel:'PRÓXIMOS EVENTOS',
+  view:'VER EVENTO',
+  coming:'EM BREVE',
+  sales:'INGRESSOS DISPONÍVEIS',
+  sold:'ESGOTADO',
+  emptyTitle:'NOVAS DATAS A CAMINHO',
+  emptyBody:'Acompanhe a GTRZ para receber primeiro os próximos anúncios.',
+  emptyCta:'SEGUIR NO INSTAGRAM',
+  feedbackEyebrow:'SUA OPINIÃO',
+  feedbackTitle:'AJUDE A GTRZ A FAZER MELHOR.',
+  feedbackBody:'Ideias, críticas e sugestões sobre nossas festas. Você também pode enviar de forma anônima.',
+  feedbackCta:'ENVIAR SUGESTÃO',
+  freelancerEyebrow:'OPORTUNIDADES',
+  freelancerTitle:'FAÇA PARTE DAS PRÓXIMAS PRODUÇÕES.',
+  freelancerBody:'Estamos ampliando nossa base de freelancers para os eventos GTRZ.',
+  freelancerCta:'CADASTRO DE FREELANCERS',
+  footer:'GTRZ EVENTOS · CULTURA LATINA EM MOVIMENTO'
+};
+
+const parseTheme=(event:CmsEvent)=>{try{return JSON.parse(event.theme_json||'{}')}catch{return {}}};
+const posterId=(event:CmsEvent)=>{
+  const theme=parseTheme(event);
+  return theme.hubCardMediaId||theme.hub_card_media_id||null;
+};
+const mediaUrl=(id?:string|null)=>id?`${API_BASE}/api/media/${encodeURIComponent(id)}`:'';
+const formatDate=(iso:string)=>{
+  try{
+    return new Intl.DateTimeFormat(es?'es-ES':'pt-BR',{day:'2-digit',month:'short'}).format(new Date(iso)).replace('.','').toUpperCase();
+  }catch{return ''}
+};
+const formatTime=(iso:string)=>{
+  try{return new Intl.DateTimeFormat(es?'es-ES':'pt-BR',{hour:'2-digit',minute:'2-digit'}).format(new Date(iso))}
+  catch{return ''}
+};
+const status=(event:CmsEvent)=>event.status==='sales_open'?copy.sales:event.status==='sold_out'?copy.sold:copy.coming;
+const location=(event:CmsEvent)=>[event.city,event.state].filter(Boolean).join(' · ');
+
+type EventPalette={accent:string;accent2:string;glow:string};
+const eventPalette=(event:CmsEvent):EventPalette=>{
+  const key=`${event.slug} ${event.title||''}`.toLowerCase();
+  if(key.includes('misterio')||key.includes('mistério')){
+    return {accent:'#51f27a',accent2:'#123a21',glow:'rgba(81,242,122,.22)'};
+  }
+  if(key.includes('macabra')||key.includes('perreo')){
+    return {accent:'#ff7a1a',accent2:'#7d2cff',glow:'rgba(255,90,26,.24)'};
+  }
+  const theme=parseTheme(event);
+  const raw=theme.accentColor||theme.accent||theme.primaryColor||theme.primary;
+  if(typeof raw==='string'&&/^#[0-9a-f]{6}$/i.test(raw)){
+    return {accent:raw,accent2:'#2a1212',glow:'rgba(255,36,26,.2)'};
+  }
+  return {accent:'#ff241a',accent2:'#3a1010',glow:'rgba(255,36,26,.2)'};
+};
+
+const heroEvents=activeEvents.slice(0,2).map(event=>({
+  event,
+  artwork:mediaUrl(posterId(event)),
+  palette:eventPalette(event)
+}));
+const heroCities=[...new Set(activeEvents.map(event=>event.city).filter(Boolean))].slice(0,3).join(' · ');
+const heroPeriod=activeEvents[0]?.starts_at?new Intl.DateTimeFormat(es?'es-ES':'pt-BR',{month:'long',year:'numeric'}).format(new Date(activeEvents[0].starts_at)).toUpperCase():'';
+---
+<LanguageGate locale={locale} chrome={siteSettings.chrome||{}} mode="hub" />
+<div class="event-hub" id="top">
+  <header class="hub-header">
+    <a class="hub-brand" href="#top" aria-label="GTRZ Eventos" data-track="hub.logo">
+      <img src="/brand/gtrz-wordmark.svg" alt="GTRZ" />
+    </a>
+
+    <nav class="hub-nav" aria-label={es?'Navegación':'Navegação'}>
+      <a class="hub-nav-events" href="#eventos" data-track="hub.nav.events">{copy.navEvents}</a>
+      <a class="hub-nav-suggestions" href={es?'/sugestoes?lang=es':'/sugestoes'} data-track="hub.nav.suggestions">{copy.navSuggestions}</a>
+      <a class="hub-nav-instagram" href={instagram} target="_blank" rel="noreferrer" data-track="hub.nav.instagram">{copy.navInstagram}</a>
+      <div class="hub-lang" aria-label="Idioma">
+        <a class:list={{active:!es}} href="?lang=pt-BR" data-language="pt-BR" data-track="hub.lang.pt">PT</a>
+        <a class:list={{active:es}} href="?lang=es" data-language="es" data-track="hub.lang.es">ES</a>
+      </div>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hub-hero">
+      <div class="hub-hero-ambient" aria-hidden="true">
+        <div class="hub-hero-light"></div>
+        {heroEvents.map((item,index)=>(
+          <div
+            class:list={['hub-ghost-card',index===0?'ghost-a':'ghost-b',!item.artwork&&'ghost-fallback']}
+            style={`--ghost-accent:${item.palette.accent};--ghost-accent-2:${item.palette.accent2};--ghost-glow:${item.palette.glow};--ghost-image:${item.artwork?`url('${item.artwork}')`:'none'}`}
+          >
+            <span>{item.event.title||item.event.slug}</span>
+          </div>
+        ))}
+      </div>
+
+      <div class="hub-edge-mark" aria-hidden="true"><span>GTRZ / 2026</span></div>
+
+      <div class="hub-shell hub-hero-grid">
+        <div class="hub-hero-copy">
+          <div class="hub-eyebrow"><span></span>{copy.eyebrow}</div>
+          <h1><span>{copy.titleTop}</span><strong>{copy.titleBottom}</strong></h1>
+          {(heroCities||heroPeriod)&&(
+            <div class="hub-hero-meta">
+              {heroCities&&<span>{heroCities}</span>}
+              {heroCities&&heroPeriod&&<i></i>}
+              {heroPeriod&&<span>{heroPeriod}</span>}
+            </div>
+          )}
+        </div>
+
+        <div class="hub-intro">
+          <div class="hub-intro-number">{activeEvents.length?'01':'00'}</div>
+          <p>{copy.intro}</p>
+          <a href="#eventos" class="hub-scroll" data-track="hub.hero.events">
+            <span>{copy.navEvents}</span>
+            <i aria-hidden="true">↓</i>
+          </a>
+        </div>
+      </div>
+
+      <div class="hub-marquee" aria-hidden="true">
+        <div class="hub-marquee-track">
+          <div class="hub-marquee-group">
+            {marqueeItems.map(()=> <span>{marqueeText}</span>)}
+          </div>
+          <div class="hub-marquee-group">
+            {marqueeItems.map(()=> <span>{marqueeText}</span>)}
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="hub-events hub-shell" id="eventos" data-section="events">
+      <div class="hub-section-head">
+        <div class="hub-section-number">01</div>
+        <div class="hub-section-label">
+          <span>{copy.listLabel}</span>
+          <i></i>
+        </div>
+      </div>
+
+      {activeEvents.length ? (
+        <div class:list={['hub-event-grid',activeEvents.length===1&&'single']}>
+          {activeEvents.map((event,index)=>{
+            const artwork=mediaUrl(posterId(event));
+            const eventLocation=location(event);
+            const palette=eventPalette(event);
+            return (
+              <article
+                class:list={['hub-event-card',index===0&&'lead',!artwork&&'no-art']}
+                style={`--event-accent:${palette.accent};--event-accent-2:${palette.accent2};--event-glow:${palette.glow}`}
+              >
+                <a href={es?`/es/eventos/${event.slug}`:`/eventos/${event.slug}`} data-astro-prefetch="viewport" data-track={`hub.event.${event.slug}`} aria-label={`${copy.view}: ${event.title||event.slug}`}>
+                  <div class="hub-event-visual">
+                    {artwork
+                      ? <img src={artwork} alt={event.title||event.slug} loading={index===0?'eager':'lazy'} />
+                      : (
+                        <div class="hub-event-generated" aria-hidden="true">
+                          <div class="hub-event-orbit"></div>
+                          <img src="/brand/gtrz-symbol.svg" alt="" />
+                          <span>{event.title||event.slug}</span>
+                        </div>
+                      )}
+                    <div class="hub-event-shade"></div>
+                    <div class="hub-event-accent-line"></div>
+                    <div class="hub-event-topline">
+                      <span class:list={['hub-status',event.status==='sales_open'&&'sales',event.status==='sold_out'&&'sold']}>{status(event)}</span>
+                      <span class="hub-event-index">{String(index+1).padStart(2,'0')}</span>
+                    </div>
+                  </div>
+
+                  <div class="hub-event-info">
+                    <div class="hub-event-meta">
+                      <span>{eventLocation}</span>
+                      <span>{formatDate(event.starts_at)} · {formatTime(event.starts_at)}</span>
+                    </div>
+
+                    <div class="hub-event-title-row">
+                      <h2>{event.title||event.slug}</h2>
+                      <svg class="hub-event-arrow" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <path d="M7 17 17 7M9 7h8v8" />
+  </svg>
+                    </div>
+
+                    {event.venue_name&&<p>{event.venue_name}</p>}
+                    <div class="hub-event-cta"><span>{copy.view}</span><i></i></div>
+                  </div>
+                </a>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <div class="hub-empty">
+          <img src="/brand/gtrz-symbol.svg" alt="" />
+          <div><h2>{copy.emptyTitle}</h2><p>{copy.emptyBody}</p></div>
+          <a href={instagram} target="_blank" rel="noreferrer" data-track="hub.empty.instagram">{copy.emptyCta}</a>
+        </div>
+      )}
+    </section>
+
+    <section class="hub-feedback hub-shell" data-section="feedback" aria-label={copy.feedbackEyebrow}>
+      <div class="hub-feedback-inner">
+        <div class="hub-feedback-marker">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M5 5.5h14v9H9.5L6 18v-3.5H5z" />
+          </svg>
+          <span>{copy.feedbackEyebrow}</span>
+        </div>
+        <div class="hub-feedback-copy">
+          <strong>{copy.feedbackTitle}</strong>
+          <p>{copy.feedbackBody}</p>
+        </div>
+        <a class="hub-feedback-link" href={es?'/sugestoes?lang=es':'/sugestoes'} data-track="hub.feedback">
+          <span>{copy.feedbackCta}</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M7 17 17 7M9 7h8v8" />
+          </svg>
+        </a>
+      </div>
+    </section>
+
+    <section class="hub-freelancers hub-shell" data-section="freelancers">
+      <div class="hub-freelancers-inner">
+        <div class="hub-freelancers-kicker">{copy.freelancerEyebrow}</div>
+        <div class="hub-freelancers-copy">
+          <h2>{copy.freelancerTitle}</h2>
+          <p>{copy.freelancerBody}</p>
+        </div>
+        <a
+          class="hub-freelancers-link"
+          href={`/trabalhe-conosco?lang=${locale}`}
+          data-track="hub.freelancers"
+        >
+          <span>{copy.freelancerCta}</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M7 17 17 7M9 7h8v8" />
+          </svg>
+        </a>
+      </div>
+    </section>
+  </main>
+
+  <GtrzFooter locale={locale} settings={siteSettings} />
+</div>
+
+<script>
+  document.querySelectorAll<HTMLElement>('[data-language]').forEach((link)=>{
+    if (link.dataset.hubLanguageBound === '1') return;
+    link.dataset.hubLanguageBound = '1';
+    link.addEventListener('click',()=>{
+      try {
+        localStorage.setItem('gtrz_locale',link.dataset.language || 'pt-BR');
+        localStorage.setItem('gtrz_language_gate_seen','1');
+      } catch {}
+    });
+  });
+</script>
+
+<style>
+  .event-hub{
+    min-height:100vh;
+    overflow:hidden;
+    background:
+      radial-gradient(circle at 88% 1%,rgba(255,36,26,.09),transparent 24rem),
+      linear-gradient(180deg,#080808 0%,#060606 100%);
+    color:var(--hub-white)
+  }
+  .hub-shell{width:calc(100% - 28px);max-width:1320px;margin-inline:auto}
+
+  .hub-header{
+    width:100%;
+    max-width:none;
+    height:68px;
+    margin:0;
+    padding-inline:max(14px,calc((100vw - 1320px)/2));
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:16px;
+    border-bottom:1px solid var(--hub-line);
+    position:relative;
+    z-index:20
+  }
+  .hub-brand{display:flex;align-items:center;min-width:0}
+  .hub-brand img{width:88px}
+  .hub-nav{display:flex;align-items:center;gap:14px;min-width:0;font-size:.59rem;font-weight:800;letter-spacing:.10em;text-transform:uppercase;color:#8f8884}
+  .hub-nav a{white-space:nowrap}
+  .hub-nav-events{display:none}
+  .hub-nav-suggestions{display:none}
+  .hub-nav-instagram{color:#c5bfbb}
+  .hub-lang{
+    display:flex;
+    align-items:center;
+    gap:3px;
+    padding:3px;
+    border:1px solid rgba(255,255,255,.11);
+    border-radius:999px;
+    background:#0e0e0e
+  }
+  .hub-lang a{
+    min-width:34px;
+    height:30px;
+    padding:0 8px;
+    border-radius:999px;
+    display:grid;
+    place-items:center;
+    color:#625b59;
+    font-size:.62rem;
+    font-weight:950;
+    letter-spacing:.08em;
+    transition:.18s ease
+  }
+  .hub-lang a:hover{color:#fff}
+  .hub-lang a.active{color:#fff;background:#222}
+
+  .hub-hero{position:relative;padding-top:38px;isolation:isolate}
+  .hub-hero-grid{position:relative;z-index:3;display:grid;grid-template-columns:1fr;gap:24px}
+  .hub-hero-ambient{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+  .hub-hero-light{
+    position:absolute;
+    right:-18%;
+    top:-14%;
+    width:28rem;
+    height:28rem;
+    border-radius:50%;
+    background:radial-gradient(circle,rgba(255,36,26,.13),rgba(255,36,26,.035) 36%,transparent 70%);
+    filter:blur(10px)
+  }
+  .hub-ghost-card{
+    position:absolute;
+    width:150px;
+    aspect-ratio:3/4;
+    border:1px solid color-mix(in srgb,var(--ghost-accent) 28%,transparent);
+    background-image:
+      linear-gradient(180deg,rgba(7,7,7,.34),rgba(7,7,7,.92)),
+      var(--ghost-image),
+      radial-gradient(circle at 50% 42%,var(--ghost-glow),transparent 64%);
+    background-size:cover;
+    background-position:center;
+    box-shadow:0 0 65px var(--ghost-glow);
+    opacity:.17;
+    filter:saturate(.75) contrast(1.05);
+    transform:rotate(7deg)
+  }
+  .hub-ghost-card span{
+    position:absolute;
+    left:10px;
+    bottom:9px;
+    max-width:86%;
+    overflow:hidden;
+    color:var(--ghost-accent);
+    font-family:'Barlow Condensed','Arial Narrow',sans-serif;
+    font-size:1.5rem;
+    font-weight:900;
+    line-height:.8;
+    text-transform:uppercase
+  }
+  .ghost-a{right:5%;top:8%}
+  .ghost-b{right:-8%;top:31%;transform:rotate(-8deg);opacity:.12}
+  .ghost-fallback{
+    background-image:
+      linear-gradient(135deg,var(--ghost-accent-2),#090909 62%),
+      radial-gradient(circle at 45% 35%,var(--ghost-glow),transparent 60%)
+  }
+  .hub-edge-mark{display:none}
+  .hub-eyebrow{display:flex;align-items:center;gap:10px;color:#a9a29e;font-size:.60rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase}
+  .hub-eyebrow span{width:24px;height:2px;background:var(--hub-red);flex:none}
+  .hub-hero h1{
+    margin:16px 0 0;
+    max-width:100%;
+    font-family:'Barlow Condensed','Arial Narrow',sans-serif;
+    font-size:clamp(3.75rem,18.5vw,5.6rem);
+    font-weight:900;
+    line-height:.80;
+    letter-spacing:-.038em;
+    text-transform:uppercase
+  }
+  .hub-hero h1 span,.hub-hero h1 strong{display:block}
+  .hub-hero h1 strong{color:var(--hub-red);font-weight:900}
+  .hub-hero-meta{display:flex;align-items:center;gap:10px;margin-top:20px;color:#6f6864;font-size:.54rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+  .hub-hero-meta i{width:18px;height:1px;background:#36312f}
+  .hub-intro{max-width:32rem;position:relative}
+  .hub-intro-number{display:none;color:rgba(255,255,255,.06);font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-size:4rem;font-weight:900;line-height:1}
+  .hub-intro p{margin:0;color:#a69e9a;font-size:.94rem;line-height:1.65}
+  .hub-scroll{display:inline-flex;align-items:center;gap:12px;margin-top:20px;font-size:.61rem;font-weight:800;letter-spacing:.11em;text-transform:uppercase}
+  .hub-scroll i{display:grid;place-items:center;width:34px;height:34px;border:1px solid var(--hub-line);border-radius:50%;color:var(--hub-red);font-style:normal}
+
+  .hub-marquee{
+    width:100%;
+    margin-top:34px;
+    overflow:hidden;
+    padding:11px 0;
+    border-top:1px solid var(--hub-line);
+    border-bottom:1px solid var(--hub-line);
+    color:#514c49;
+    font-size:.54rem;
+    font-weight:800;
+    letter-spacing:.14em;
+    white-space:nowrap;
+    position:relative;
+    z-index:5
+  }
+  .hub-marquee-track{
+    display:flex;
+    width:max-content;
+    will-change:transform;
+    animation:hub-marquee 96s linear infinite
+  }
+  .hub-marquee-group{display:flex;align-items:center;flex:none;width:max-content}
+  .hub-marquee-group span{flex:none;padding-left:34px}
+  @keyframes hub-marquee{to{transform:translateX(-50%)}}
+
+  .hub-events{padding-top:42px;padding-bottom:68px;position:relative}
+  .hub-section-head{display:grid;grid-template-columns:38px minmax(0,1fr);gap:14px;align-items:center;margin-bottom:18px}
+  .hub-section-number{
+    font-family:'Barlow Condensed','Arial Narrow',sans-serif;
+    color:var(--hub-red);
+    font-size:1.65rem;
+    font-weight:900;
+    line-height:1
+  }
+  .hub-section-label{display:grid;grid-template-columns:auto minmax(30px,1fr);align-items:center;gap:12px;color:#a39c98;font-size:.59rem;font-weight:800;letter-spacing:.12em}
+  .hub-section-label span{white-space:nowrap}.hub-section-label i{height:1px;background:var(--hub-line)}
+
+  .hub-event-grid{display:grid;grid-template-columns:1fr;gap:14px}
+  .hub-event-card{
+    min-width:0;
+    border:1px solid rgba(255,255,255,.12);
+    background:#0a0a0a;
+    overflow:hidden;
+    position:relative
+  }
+  .hub-event-card::before{
+    content:'';
+    position:absolute;
+    inset:auto -10% -45% 22%;
+    height:65%;
+    background:radial-gradient(circle,var(--event-glow),transparent 68%);
+    opacity:.55;
+    pointer-events:none
+  }
+  .hub-event-card>a{display:block;position:relative;z-index:1}
+  .hub-event-visual{
+    position:relative;
+    min-height:190px;
+    aspect-ratio:16/9;
+    overflow:hidden;
+    background:
+      linear-gradient(135deg,color-mix(in srgb,var(--event-accent-2) 76%,#080808),#080808 62%)
+  }
+  .hub-event-visual>img{width:100%;height:100%;object-fit:cover}
+  .hub-event-generated{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .hub-event-generated::before{
+    content:'';
+    position:absolute;
+    width:72%;
+    aspect-ratio:1;
+    border-radius:50%;
+    border:1px solid color-mix(in srgb,var(--event-accent) 28%,transparent);
+    box-shadow:0 0 72px var(--event-glow),inset 0 0 72px color-mix(in srgb,var(--event-accent) 7%,transparent)
+  }
+  .hub-event-generated::after{
+    content:'';
+    position:absolute;
+    inset:12% -15%;
+    background:linear-gradient(108deg,transparent 33%,color-mix(in srgb,var(--event-accent) 12%,transparent) 48%,transparent 62%);
+    transform:rotate(-7deg)
+  }
+  .hub-event-generated img{position:relative;z-index:2;width:54px;opacity:.85}
+  .hub-event-generated span{
+    position:absolute;
+    left:14px;
+    right:14px;
+    bottom:-5px;
+    color:color-mix(in srgb,var(--event-accent) 18%,transparent);
+    font-family:'Barlow Condensed','Arial Narrow',sans-serif;
+    font-size:clamp(4rem,22vw,7rem);
+    font-weight:900;
+    line-height:.75;
+    letter-spacing:-.04em;
+    text-transform:uppercase;
+    white-space:nowrap
+  }
+  .hub-event-orbit{
+    position:absolute;
+    width:42%;
+    aspect-ratio:1;
+    border-radius:50%;
+    border:1px solid color-mix(in srgb,var(--event-accent) 45%,transparent);
+    transform:rotate(22deg)
+  }
+  .hub-event-shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.08),transparent 50%,rgba(0,0,0,.72))}
+  .hub-event-accent-line{position:absolute;left:0;bottom:0;width:34%;height:3px;background:var(--event-accent)}
+  .hub-event-topline{position:absolute;left:12px;right:12px;top:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;z-index:4}
+  .hub-status{
+    display:inline-flex;
+    align-items:center;
+    min-height:27px;
+    padding:0 9px;
+    border:1px solid rgba(255,255,255,.24);
+    background:rgba(7,7,7,.68);
+    backdrop-filter:blur(10px);
+    color:#eee9e5;
+    font-size:.53rem;
+    font-weight:800;
+    letter-spacing:.09em;
+    white-space:nowrap
+  }
+  .hub-status.sales{background:var(--event-accent);border-color:var(--event-accent);color:#050505}
+  .hub-status.sold{background:#fff;border-color:#fff;color:#111}
+  .hub-event-index{font-family:'Barlow Condensed','Arial Narrow',sans-serif;color:#d7d0cc;font-size:1.35rem;font-weight:900;line-height:1;text-shadow:0 1px 12px rgba(0,0,0,.6)}
+  .hub-event-info{position:relative;padding:16px 14px 19px;background:linear-gradient(180deg,rgba(10,10,10,.94),#090909)}
+  .hub-event-meta{display:flex;flex-direction:column;gap:5px;color:#827a76;font-size:.57rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase}
+  .hub-event-meta span:first-child{color:color-mix(in srgb,var(--event-accent) 68%,#aaa)}
+  .hub-event-title-row{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin-top:13px}
+  .hub-event-title-row h2{
+    margin:0;
+    max-width:88%;
+    overflow-wrap:anywhere;
+    font-family:'Barlow Condensed','Arial Narrow',sans-serif;
+    font-size:clamp(2.55rem,13vw,3.85rem);
+    font-weight:900;
+    line-height:.86;
+    letter-spacing:-.025em;
+    text-transform:uppercase
+  }
+  .hub-event-arrow{
+    flex:none;
+    width:22px;
+    height:22px;
+    color:var(--event-accent);
+    fill:none;
+    stroke:currentColor;
+    stroke-width:1.8;
+    stroke-linecap:round;
+    stroke-linejoin:round
+  }
+  .hub-event-info p{margin:10px 0 0;color:#918985;font-size:.76rem;line-height:1.45}
+  .hub-event-cta{display:flex;align-items:center;gap:10px;margin-top:20px;color:#fff;font-size:.59rem;font-weight:800;letter-spacing:.11em;text-transform:uppercase}
+  .hub-event-cta i{height:1px;width:34px;background:var(--event-accent)}
+  .hub-event-card.no-art .hub-event-visual{aspect-ratio:16/8.4}
+
+  .hub-empty{display:grid;gap:22px;padding:25px;border:1px solid var(--hub-line)}
+  .hub-empty>img{width:52px;opacity:.72}
+  .hub-empty h2{margin:0;font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-size:2.65rem;font-weight:900;line-height:.9;text-transform:uppercase}
+  .hub-empty p{margin-bottom:0;color:#938985;line-height:1.55}
+  .hub-empty>a{width:max-content;padding:13px 16px;background:var(--hub-red);font-size:.59rem;font-weight:800;letter-spacing:.09em}
+
+  .hub-feedback{
+    padding:0 0 36px;
+  }
+  .hub-feedback-inner{
+    overflow:hidden;
+    display:grid;
+    grid-template-columns:1fr;
+    border:1px solid rgba(255,255,255,.11);
+    background:#0b0b0b;
+  }
+  .hub-feedback-marker{
+    min-height:44px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:0 15px;
+    background:var(--hub-red);
+    color:#080808;
+  }
+  .hub-feedback-marker svg{
+    width:17px;
+    height:17px;
+    flex:none;
+    fill:none;
+    stroke:currentColor;
+    stroke-width:1.9;
+    stroke-linecap:round;
+    stroke-linejoin:round;
+  }
+  .hub-feedback-marker span{
+    font-size:.56rem;
+    font-weight:950;
+    letter-spacing:.13em;
+    text-transform:uppercase;
+  }
+  .hub-feedback-copy{
+    min-width:0;
+    padding:20px 18px 13px;
+  }
+  .hub-feedback-copy strong{
+    display:block;
+    max-width:620px;
+    color:#f5f1ed;
+    font-family:'Barlow Condensed','Arial Narrow',sans-serif;
+    font-size:clamp(2rem,8.5vw,2.85rem);
+    font-weight:900;
+    line-height:.9;
+    letter-spacing:-.02em;
+    text-transform:uppercase;
+  }
+  .hub-feedback-copy p{
+    max-width:650px;
+    margin:9px 0 0;
+    color:#817a76;
+    font-size:.74rem;
+    line-height:1.55;
+  }
+  .hub-feedback-link{
+    min-height:46px;
+    margin:0 18px 18px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    padding:0 15px;
+    background:#f1ede9;
+    color:#090909;
+    font-size:.57rem;
+    font-weight:950;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    transition:background .18s ease,transform .18s ease;
+  }
+  .hub-feedback-link svg{
+    width:17px;
+    height:17px;
+    flex:none;
+    fill:none;
+    stroke:var(--hub-red);
+    stroke-width:1.9;
+    stroke-linecap:round;
+    stroke-linejoin:round;
+    transition:transform .18s ease;
+  }
+  .hub-feedback-link:hover{
+    background:#fff;
+    transform:translateY(-1px);
+  }
+  .hub-feedback-link:hover svg{transform:translate(3px,-3px)}
+
+  .hub-freelancers{
+    padding:0 0 54px;
+  }
+  .hub-freelancers-inner{
+    display:grid;
+    gap:18px;
+    padding:28px 0 4px;
+    border-top:1px solid var(--hub-line);
+  }
+  .hub-freelancers-kicker{
+    color:#756e6a;
+    font-size:.55rem;
+    font-weight:850;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+  }
+  .hub-freelancers-copy h2{
+    max-width:760px;
+    margin:0;
+    font-family:'Barlow Condensed','Arial Narrow',sans-serif;
+    font-size:clamp(2.35rem,10vw,3.65rem);
+    font-weight:900;
+    line-height:.88;
+    letter-spacing:-.025em;
+    text-transform:uppercase;
+  }
+  .hub-freelancers-copy p{
+    max-width:540px;
+    margin:14px 0 0;
+    color:#817a76;
+    font-size:.82rem;
+    line-height:1.6;
+  }
+  .hub-freelancers-link{
+    width:max-content;
+    max-width:100%;
+    display:inline-flex;
+    align-items:center;
+    gap:11px;
+    color:#b7b0ac;
+    font-size:.59rem;
+    font-weight:850;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    transition:color .18s ease;
+  }
+  .hub-freelancers-link svg{
+    width:17px;
+    height:17px;
+    flex:none;
+    fill:none;
+    stroke:currentColor;
+    stroke-width:1.7;
+    stroke-linecap:round;
+    stroke-linejoin:round;
+    transition:transform .18s ease;
+  }
+  .hub-freelancers-link:hover{color:#fff}
+  .hub-freelancers-link:hover svg{transform:translate(3px,-3px)}
+
+    .hub-footer{min-height:86px;border-top:1px solid var(--hub-line);display:grid;grid-template-columns:1fr auto;align-items:center;gap:20px;color:#67615e;font-size:.55rem;font-weight:800;letter-spacing:.10em}
+  .hub-footer img{width:76px;opacity:.85}.hub-footer span{display:none}.hub-footer a{color:#99918d}
+
+  @media(min-width:700px){
+    .hub-shell,.hub-footer{width:min(calc(100% - 48px),1320px)}
+    .hub-header{height:78px;padding-inline:max(24px,calc((100vw - 1320px)/2))}.hub-brand img{width:104px}
+    .hub-nav{gap:22px;font-size:.63rem}.hub-nav-events,.hub-nav-suggestions{display:block}
+    .hub-hero{padding-top:58px}
+    .hub-hero-grid{grid-template-columns:minmax(0,1.35fr) minmax(250px,.65fr);gap:42px;align-items:end}
+    .hub-hero h1{font-size:clamp(5.2rem,11vw,8.2rem)}
+    .hub-intro{padding-bottom:8px}.hub-intro p{font-size:1rem}
+    .hub-intro-number{display:block;position:absolute;right:0;top:-48px}
+    .hub-ghost-card{width:190px}
+    .ghost-a{right:12%;top:2%}.ghost-b{right:-2%;top:24%}
+    .hub-marquee{margin-top:48px;font-size:.58rem;padding:12px 0}
+    .hub-events{padding-top:54px;padding-bottom:90px}
+    .hub-event-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+    .hub-event-visual{aspect-ratio:16/9.3;min-height:220px}
+    .hub-event-card.no-art .hub-event-visual{aspect-ratio:16/8.8}
+    .hub-event-info{padding:18px 18px 21px}
+    .hub-event-topline{left:16px;right:16px;top:16px}
+    .hub-event-meta{flex-direction:row;justify-content:space-between;gap:16px}
+    .hub-event-title-row h2{font-size:clamp(3rem,5vw,4.35rem)}
+    .hub-empty{grid-template-columns:70px 1fr auto;align-items:center;padding:32px}
+    .hub-feedback{padding-bottom:52px}
+    .hub-feedback-inner{
+      min-height:116px;
+      grid-template-columns:128px minmax(0,1fr) auto;
+      align-items:stretch;
+    }
+    .hub-feedback-marker{
+      min-height:116px;
+      flex-direction:column;
+      align-items:flex-start;
+      justify-content:center;
+      gap:11px;
+      padding:20px 21px;
+    }
+    .hub-feedback-marker svg{width:22px;height:22px}
+    .hub-feedback-copy{
+      align-self:center;
+      padding:20px 30px;
+    }
+    .hub-feedback-copy strong{font-size:2rem}
+    .hub-feedback-copy p{font-size:.76rem}
+    .hub-feedback-link{
+      align-self:center;
+      min-height:46px;
+      margin:0 24px 0 0;
+      padding:0 17px;
+    }
+    .hub-freelancers{padding-bottom:64px}
+    .hub-freelancers-inner{grid-template-columns:130px minmax(0,1fr) auto;gap:30px;align-items:end;padding-top:34px}
+    .hub-freelancers-copy h2{font-size:clamp(2.8rem,5.4vw,4.4rem)}
+    .hub-freelancers-copy p{font-size:.86rem}
+    .hub-freelancers-link{align-self:end;margin-bottom:6px}
+    .hub-footer{grid-template-columns:auto 1fr auto}.hub-footer span{display:block;text-align:center}
+  }
+
+  @media(min-width:1100px){
+    .hub-header{height:86px}
+    .hub-hero{padding-top:66px}
+    .hub-hero-grid{grid-template-columns:minmax(0,1.45fr) minmax(280px,.55fr);gap:64px}
+    .hub-eyebrow{font-size:.65rem;letter-spacing:.16em}.hub-eyebrow span{width:32px}
+    .hub-hero h1{font-size:clamp(6.5rem,9vw,9.2rem);line-height:.82}
+    .hub-intro p{font-size:1.05rem}
+    .hub-ghost-card{width:240px;opacity:.15}
+    .ghost-a{right:14%;top:-1%}.ghost-b{right:1%;top:20%}
+    .hub-edge-mark{
+      display:flex;
+      position:absolute;
+      left:18px;
+      top:44%;
+      z-index:4;
+      align-items:center;
+      gap:10px;
+      writing-mode:vertical-rl;
+      transform:rotate(180deg);
+      color:#45403e;
+      font-size:.5rem;
+      font-weight:800;
+      letter-spacing:.18em
+    }
+    .hub-edge-mark::before{content:'';width:1px;height:44px;background:#322e2c}
+    .hub-events{padding-top:58px;padding-bottom:96px}
+    .hub-section-head{grid-template-columns:58px 1fr;gap:18px;margin-bottom:24px}
+    .hub-section-number{font-size:2rem}
+    .hub-event-card{transition:transform .24s ease,border-color .24s ease,box-shadow .24s ease}
+    .hub-event-card:hover{transform:translateY(-5px);border-color:color-mix(in srgb,var(--event-accent) 42%,rgba(255,255,255,.15));box-shadow:0 18px 44px rgba(0,0,0,.32)}
+    .hub-event-visual>img{transition:transform .55s cubic-bezier(.2,.75,.2,1),filter .3s ease}
+    .hub-event-card:hover .hub-event-visual>img{transform:scale(1.035);filter:saturate(1.08)}
+    .hub-event-generated{transition:transform .45s ease}.hub-event-card:hover .hub-event-generated{transform:scale(1.025)}
+    .hub-event-title-row h2{transition:transform .24s ease}.hub-event-card:hover .hub-event-title-row h2{transform:translateX(3px)}
+    .hub-event-arrow,.hub-event-cta i{transition:transform .2s ease,width .2s ease}
+    .hub-event-card:hover .hub-event-arrow{transform:translate(3px,-3px)}
+    .hub-event-card:hover .hub-event-cta i{width:58px}
+    .hub-freelancers{padding-bottom:74px}
+    .hub-freelancers-inner{grid-template-columns:150px minmax(0,1fr) auto;gap:48px;padding-top:40px}
+    .hub-freelancers-copy h2{max-width:720px;font-size:4.35rem}
+    .hub-freelancers-link{margin-bottom:8px}
+  }
+
+  @media(max-width:370px){
+    .hub-shell,.hub-footer{width:calc(100% - 22px)}
+    .hub-header{padding-inline:11px}
+    .hub-brand img{width:80px}
+    .hub-nav{gap:10px;font-size:.54rem}
+    .hub-lang a{min-width:30px;height:28px;padding:0 6px;font-size:.57rem}
+    .hub-hero h1{font-size:clamp(3.4rem,18vw,4.4rem)}
+    .hub-event-title-row h2{font-size:2.35rem}
+  }
+
+  @media(prefers-reduced-motion:reduce){
+    .hub-marquee-track{animation:none}
+    .hub-event-card,.hub-event-visual>img,.hub-event-generated,.hub-event-title-row h2,.hub-event-arrow,.hub-event-cta i,.hub-feedback-link,.hub-feedback-link svg,.hub-freelancers-link,.hub-freelancers-link svg{transition:none}
+  }
+</style>
