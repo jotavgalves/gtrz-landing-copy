@@ -10,10 +10,21 @@ import { authRoutes } from './routes/auth';
 
 const app = new Hono<{ Bindings: Env }>();
 
+const requiredCorsOrigins = [
+  'https://gtrz.com.br',
+  'https://www.gtrz.com.br',
+  'https://control.gtrz.com.br'
+];
+
 app.use('*', async (c, next) => {
-  const allowed = (c.env.CORS_ALLOWED_ORIGINS || '').split(',').map((v) => v.trim()).filter(Boolean);
+  const configured = (c.env.CORS_ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean);
+  const allowed = new Set([...requiredCorsOrigins, ...configured]);
+
   return cors({
-    origin: (origin) => allowed.includes(origin) ? origin : allowed[0] || '',
+    origin: (origin) => allowed.has(origin) ? origin : '',
     credentials: true,
     allowHeaders: ['Content-Type'],
     allowMethods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS']
