@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { api, login, logout } from './lib/api';
+import { Turnstile } from './components/Turnstile';
 import { Icon, type IconName } from './components/Icons';
 import { Dashboard } from './modules/dashboard/Dashboard';
 import { Content } from './modules/content/Content';
@@ -63,7 +64,9 @@ function Login({onDone}:{onDone:()=>void}){
   };
   const submit=async(e:FormEvent<HTMLFormElement>)=>{
     e.preventDefault();setError('');setBusy(true);
-    try{await login(password);onDone();}catch(err:any){setError(err.message)}finally{setBusy(false)}
+    const formData=new FormData(e.currentTarget);
+    const token=String(formData.get('cf-turnstile-response')||'')||undefined;
+    try{await login(password,token);onDone();}catch(err:any){setError(err.message)}finally{setBusy(false)}
   };
   return <main className="login-shell login-shell-v2">
     <section className="login-art login-art-v2">
@@ -87,6 +90,7 @@ function Login({onDone}:{onDone:()=>void}){
         </div>
         <p>{copy.loginBody}</p>
         <label className="field login-password-field"><span>{copy.password}</span><div className="login-password-wrap"><input type={showPassword?'text':'password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••••••" autoFocus autoComplete="current-password"/><button type="button" className="login-password-toggle" onClick={()=>setShowPassword(v=>!v)} aria-label={showPassword?'Ocultar senha':'Mostrar senha'}><Icon name="eye" size={18}/></button></div></label>
+        <Turnstile/>
         <button className="primary login-submit login-submit-v2" disabled={busy||!password}>{busy?copy.validating:<><span>{copy.enter}</span><Icon name="arrow" size={18}/></>}</button>
         {error&&<div className="notice notice-error"><span>{error}</span></div>}
         <div className="login-security-v2"><Icon name="system" size={15}/><span>{copy.security}</span></div>
