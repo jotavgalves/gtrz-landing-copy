@@ -10,8 +10,7 @@ import {
   registerLoginFailure,
   requireAdmin,
   revokeSession,
-  safeSecretEqual,
-  verifyTurnstile
+  safeSecretEqual
 } from '../security';
 
 export const authRoutes = new Hono<{ Bindings: Env }>();
@@ -30,7 +29,6 @@ authRoutes.post('/login', async(c)=>{
     c.header('retry-after',String(lock.retryAfterSeconds));
     return c.json({error:'login_locked',retryAfterSeconds:lock.retryAfterSeconds},429);
   }
-  if(!(await verifyTurnstile(c,body.turnstileToken))) return c.json({error:'challenge_failed'},400);
   const valid=Boolean(body.password) && await safeSecretEqual(body.password||'',c.env.ADMIN_PASSWORD);
   if(!valid){
     const failed=await registerLoginFailure(c.env,actorHash);
