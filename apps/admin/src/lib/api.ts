@@ -1,4 +1,7 @@
-export const API_BASE = import.meta.env.VITE_API_BASE || '';
+const configuredApiBase = (import.meta.env.VITE_API_BASE || '').trim();
+const isProductionControl = typeof window !== 'undefined' && window.location.hostname === 'control.gtrz.com.br';
+
+export const API_BASE = isProductionControl ? 'https://api.gtrz.com.br' : configuredApiBase;
 
 export async function api<T>(path:string, init:RequestInit = {}):Promise<T>{
   const isForm = typeof FormData !== 'undefined' && init.body instanceof FormData;
