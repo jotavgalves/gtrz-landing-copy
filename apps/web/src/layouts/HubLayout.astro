@@ -54,6 +54,11 @@ const socialLocaleAlternate=es?'pt_BR':'es_ES';
   </head>
   <body>
     <slot />
+    <script is:inline>
+      document.querySelectorAll('img:not([decoding])').forEach((img)=>{ img.decoding='async'; });
+      const criticalImage=document.querySelector('.hub-event-visual img');
+      if(criticalImage){ criticalImage.loading='eager'; criticalImage.fetchPriority='high'; }
+    </script>
     <script define:vars={{apiBase,locale}}>
       const sessionKey='gtrz_session_id';
       const attributionKey='gtrz_attribution';
