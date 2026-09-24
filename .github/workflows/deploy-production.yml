@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 25
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_ACCOUNT_ID: daad083db88f5fdc9e377d520ac2f57d
       GTRZ_ADMIN_PASSWORD: ${{ secrets.GTRZ_ADMIN_PASSWORD }}
       GTRZ_SESSION_SECRET: ${{ secrets.GTRZ_SESSION_SECRET }}
       GTRZ_TURNSTILE_SECRET_KEY: ${{ secrets.GTRZ_TURNSTILE_SECRET_KEY }}
@@ -39,38 +39,31 @@ jobs:
           node-version: 22
 
       - name: Check Cloudflare credentials
-        id: cloudflare
         shell: bash
         run: |
-          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "Cloudflare credentials are not configured in GitHub secrets; deployment is being skipped safely."
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN is not configured in GitHub Actions secrets."
+            exit 1
           fi
+          echo "Cloudflare credentials are configured for account $CLOUDFLARE_ACCOUNT_ID."
 
       - name: Install dependencies
-        if: steps.cloudflare.outputs.ready == 'true'
         run: pnpm install --no-frozen-lockfile
 
       - name: Validate platform
-        if: steps.cloudflare.outputs.ready == 'true'
         run: |
           pnpm typecheck
           pnpm build
 
       - name: Deploy API and provision bindings
-        if: steps.cloudflare.outputs.ready == 'true'
         working-directory: apps/api
         run: pnpm exec wrangler deploy
 
       - name: Apply D1 migrations
-        if: steps.cloudflare.outputs.ready == 'true'
         working-directory: apps/api
         run: pnpm exec wrangler d1 migrations apply DB --remote
 
       - name: Configure API secrets
-        if: steps.cloudflare.outputs.ready == 'true'
         working-directory: apps/api
         shell: bash
         run: |
@@ -93,19 +86,16 @@ jobs:
           fi
 
       - name: Deploy API after secret updates
-        if: steps.cloudflare.outputs.ready == 'true'
         working-directory: apps/api
         run: pnpm exec wrangler deploy --keep-vars
 
       - name: Deploy institutional site
-        if: steps.cloudflare.outputs.ready == 'true'
         working-directory: apps/web
         run: |
           pnpm build
           pnpm exec wrangler deploy
 
       - name: Deploy GTRZ Control
-        if: steps.cloudflare.outputs.ready == 'true'
         working-directory: apps/admin
         run: |
           pnpm build
