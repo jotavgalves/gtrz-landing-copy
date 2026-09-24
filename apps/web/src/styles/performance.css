@@ -1,0 +1,55 @@
+/* Rendering safeguards for the public site. Keep visual identity while reducing paint/compositing work. */
+
+.hub-feedback,
+.hub-freelancers,
+.event-about-premium,
+.event-lineup-premium,
+.event-countdown,
+.event-tickets-premium,
+.event-location-premium,
+.event-terms-premium,
+.event-instagram-premium {
+  content-visibility:auto;
+  contain-intrinsic-size:auto 620px;
+}
+
+.hub-event-card,
+.event-artist-card,
+.event-ticket-card {
+  contain:paint;
+}
+
+/* The user requested the text strip to remain static instead of animating forever. */
+.hub-marquee-track {
+  animation:none!important;
+  transform:none!important;
+  will-change:auto!important;
+}
+
+@media(max-width:699px){
+  /* Backdrop blur is one of the most expensive effects on mid-range mobile GPUs. */
+  .language-gate,
+  .hub-status,
+  .event-hero-location,
+  .event-hero-status,
+  .event-poster-kicker,
+  .event-facts-band {
+    backdrop-filter:none!important;
+    -webkit-backdrop-filter:none!important;
+  }
+
+  .language-gate{background:rgba(0,0,0,.96)!important}
+  .hub-status{background:rgba(7,7,7,.92)}
+  .event-hero-location,
+  .event-hero-status,
+  .event-poster-kicker{background:rgba(3,3,3,.9)}
+  .event-facts-band{background:rgba(5,5,5,.96)}
+
+  /* Preserve the same glow composition without forcing a full-screen blur pass. */
+  .hub-hero-light{filter:none!important;opacity:.72}
+  .hub-ghost-card{filter:none!important}
+}
+
+@media(prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto!important}
+}
