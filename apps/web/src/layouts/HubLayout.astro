@@ -1,9 +1,11 @@
 ---
 import type { Locale } from '@/lib/cms';
+import '@/styles/performance.css';
 
 const { locale, ogImage='' } = Astro.props as { locale:Locale; ogImage?:string };
 const es=locale==='es';
 const apiBase=import.meta.env.PUBLIC_API_BASE||'';
+const apiOrigin=(()=>{try{return apiBase?new URL(apiBase,Astro.url.origin).origin:''}catch{return ''}})();
 const title=es?'GTRZ Eventos — Próximas noches':'GTRZ Eventos — Próximas noites';
 const description=es
   ?'Agenda oficial de eventos GTRZ. Elige tu próxima noche.'
@@ -44,6 +46,7 @@ const socialLocaleAlternate=es?'pt_BR':'es_ES';
     <meta name="twitter:description" content={description} />
     {absoluteOgImage&&<meta name="twitter:image" content={absoluteOgImage} />}
     {absoluteOgImage&&<meta name="twitter:image:alt" content={es?'Próximos eventos de GTRZ Eventos':'Próximos eventos da GTRZ Eventos'} />}
+    {apiOrigin&&<link rel="preconnect" href={apiOrigin} crossorigin="anonymous" />}
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800;900&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -51,6 +54,11 @@ const socialLocaleAlternate=es?'pt_BR':'es_ES';
   </head>
   <body>
     <slot />
+    <script is:inline>
+      document.querySelectorAll('img:not([decoding])').forEach((img)=>{ img.decoding='async'; });
+      const criticalImage=document.querySelector('.hub-event-visual img');
+      if(criticalImage){ criticalImage.loading='eager'; criticalImage.fetchPriority='high'; }
+    </script>
     <script define:vars={{apiBase,locale}}>
       const sessionKey='gtrz_session_id';
       const attributionKey='gtrz_attribution';
@@ -76,7 +84,9 @@ const socialLocaleAlternate=es?'pt_BR':'es_ES';
         else fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:payload,keepalive:true}).catch(()=>{});
       };
       window.gtrzTrack=send;
-      send('page_view',{section:'event_hub'});
+      const sendPageView=()=>send('page_view',{section:'event_hub'});
+      if('requestIdleCallback' in window) window.requestIdleCallback(sendPageView,{timeout:1200});
+      else setTimeout(sendPageView,0);
       document.addEventListener('click',(event)=>{
         const el=event.target.closest('[data-track]');
         if(el)send(el.dataset.trackEvent||'cta_click',{element:el.dataset.track,section:'event_hub'});

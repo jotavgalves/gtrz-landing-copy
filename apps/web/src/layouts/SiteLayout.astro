@@ -22,6 +22,7 @@ import '@/styles/mobile-hardening.css';
 import '@/styles/mobile-polish.css';
 import '@/styles/partnerships-mobile-fix.css';
 import '@/styles/privacy-checkbox-fix.css';
+import '@/styles/performance.css';
 interface Props {
   title?: string;
   description?: string;
@@ -63,6 +64,7 @@ const absoluteOgImage=ogImage?new URL(ogImage,Astro.url.origin).toString():'';
 const socialLocale=locale==='es'?'es_ES':'pt_BR';
 const socialLocaleAlternate=locale==='es'?'pt_BR':'es_ES';
 const apiBase = import.meta.env.PUBLIC_API_BASE || '';
+const apiOrigin=(()=>{try{return apiBase?new URL(apiBase,Astro.url.origin).origin:''}catch{return ''}})();
 ---
 <!doctype html>
 <html lang={locale === 'es' ? 'es' : 'pt-BR'} data-event-popup-handoff={eventPopupHandoffEnabled?'1':undefined}>
@@ -93,6 +95,7 @@ const apiBase = import.meta.env.PUBLIC_API_BASE || '';
     <meta name="twitter:description" content={description} />
     {absoluteOgImage&&<meta name="twitter:image" content={absoluteOgImage} />}
     {absoluteOgImage&&<meta name="twitter:image:alt" content={ogImageAlt||title} />}
+    {apiOrigin&&<link rel="preconnect" href={apiOrigin} crossorigin="anonymous" />}
     <title>{title}</title>
     <ClientRouter />
     <style is:inline>
@@ -143,18 +146,27 @@ const apiBase = import.meta.env.PUBLIC_API_BASE || '';
     <Header locale={locale} chrome={chrome} compact={hubMode} instagramUrl={instagramUrl} />
     {!hubMode&&Astro.url.pathname==='/'&&<LanguageGate locale={locale} chrome={chrome} />}
     <slot />
+    <script is:inline>
+      document.querySelectorAll('img:not([decoding])').forEach((img)=>{ img.decoding='async'; });
+      const criticalImage=document.querySelector('.event-premium-hero-bg img');
+      if(criticalImage){ criticalImage.loading='eager'; criticalImage.fetchPriority='high'; }
+    </script>
     <GtrzFooter locale={locale} settings={settings} />
     <script is:inline>
       (()=>{
-        const forbidden=/[\p{Extended_Pictographic}\uFE0F\u2190-\u21FF]/gu;
-        const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
-        let node;
-        while((node=walker.nextNode())){
-          const parent=node.parentElement;
-          if(!parent||['SCRIPT','STYLE','NOSCRIPT'].includes(parent.tagName)) continue;
-          if(forbidden.test(node.nodeValue||'')) node.nodeValue=(node.nodeValue||'').replace(forbidden,'');
-          forbidden.lastIndex=0;
-        }
+        const cleanDecorativeCharacters=()=>{
+          const forbidden=/[\p{Extended_Pictographic}\uFE0F\u2190-\u21FF]/gu;
+          const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
+          let node;
+          while((node=walker.nextNode())){
+            const parent=node.parentElement;
+            if(!parent||['SCRIPT','STYLE','NOSCRIPT'].includes(parent.tagName)) continue;
+            if(forbidden.test(node.nodeValue||'')) node.nodeValue=(node.nodeValue||'').replace(forbidden,'');
+            forbidden.lastIndex=0;
+          }
+        };
+        if('requestIdleCallback' in window) window.requestIdleCallback(cleanDecorativeCharacters,{timeout:1500});
+        else setTimeout(cleanDecorativeCharacters,0);
       })();
     </script>
     <script src="/name-input-hardening.js" defer></script>
@@ -183,7 +195,9 @@ const apiBase = import.meta.env.PUBLIC_API_BASE || '';
         else fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:payload,keepalive:true}).catch(()=>{});
       };
       window.gtrzTrack = send;
-      send('page_view');
+      const sendPageView=()=>send('page_view');
+      if('requestIdleCallback' in window) window.requestIdleCallback(sendPageView,{timeout:1200});
+      else setTimeout(sendPageView,0);
       document.addEventListener('click', (event) => {
         const el = event.target.closest('[data-track]');
         if (el) send(el.dataset.trackEvent || 'cta_click',{ element: el.dataset.track, section: el.closest('[data-section]')?.dataset.section });
@@ -202,13 +216,18 @@ const apiBase = import.meta.env.PUBLIC_API_BASE || '';
       document.querySelectorAll('.reveal').forEach((el) => revealObserver.observe(el));
       const progress = document.querySelector('[data-scroll-progress]');
       const fired = new Set();
-      const onScroll = () => {
+      let scrollFrame = 0;
+      const paintScroll = () => {
+        scrollFrame = 0;
         const max = document.documentElement.scrollHeight - innerHeight;
         const pct = max > 0 ? Math.min(100, Math.max(0, scrollY / max * 100)) : 0;
         if (progress) progress.style.width = `${pct}%`;
         [25,50,75,100].forEach((mark)=>{ if(pct >= mark && !fired.has(mark)){ fired.add(mark); send(`scroll_${mark}`); } });
       };
-      addEventListener('scroll',onScroll,{passive:true}); onScroll();
+      const onScroll = () => {
+        if (!scrollFrame) scrollFrame = requestAnimationFrame(paintScroll);
+      };
+      addEventListener('scroll',onScroll,{passive:true}); paintScroll();
     </script>
   </body>
 </html>
