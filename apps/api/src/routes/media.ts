@@ -5,6 +5,7 @@ import { audit } from '../services/audit';
 
 export const mediaRoutes = new Hono<{ Bindings: Env }>();
 const MAX_BYTES = 8 * 1024 * 1024;
+const CARD_MAX_BYTES = 4 * 1024 * 1024;
 const allowed = new Map([
   ['image/jpeg','jpg'],
   ['image/png','png'],
@@ -36,6 +37,15 @@ function validMagic(type:string, bytes:Uint8Array){
   if(type==='font/otf'||type==='application/x-font-opentype') return String.fromCharCode(...bytes.slice(0,4))==='OTTO';
   return false;
 }
+function variantKey(key:string,variant:'card'){
+  const dot=key.lastIndexOf('.');
+  const stem=dot>key.lastIndexOf('/')?key.slice(0,dot):key;
+  return `${stem}-${variant}.webp`;
+}
+function imageDimension(value:FormDataEntryValue|null){
+  const number=Number(value||0);
+  return Number.isInteger(number)&&number>0&&number<=20000?number:null;
+}
 
 mediaRoutes.get('/', requireAdmin, async(c)=>{
   const rows=await c.env.DB.prepare(`
@@ -62,13 +72,28 @@ mediaRoutes.post('/', requireAdmin, async(c)=>{
   if(!ext) return c.json({error:'unsupported_media_type'},415);
   const data=new Uint8Array(await file.arrayBuffer());
   if(!validMagic(file.type,data)) return c.json({error:'invalid_file_signature'},400);
+
+  const cardFile=form.get('cardFile');
+  let cardData:Uint8Array|null=null;
+  if(cardFile instanceof File&&cardFile.size>0){
+    if(cardFile.type!=='image/webp'||cardFile.size>CARD_MAX_BYTES)return c.json({error:'invalid_card_variant'},400);
+    cardData=new Uint8Array(await cardFile.arrayBuffer());
+    if(!validMagic(cardFile.type,cardData))return c.json({error:'invalid_card_variant'},400);
+  }
+
   const now=new Date();
   const key=`uploads/${now.getUTCFullYear()}/${String(now.getUTCMonth()+1).padStart(2,'0')}/${crypto.randomUUID()}.${ext}`;
   const id=crypto.randomUUID();
-  await c.env.MEDIA.put(key,data,{httpMetadata:{contentType:file.type,cacheControl:'public, max-age=31536000, immutable'},customMetadata:{assetId:id}});
-  await c.env.DB.prepare('INSERT INTO media_assets(id,r2_key,mime_type,file_name,size_bytes,alt_pt,alt_es) VALUES(?,?,?,?,?,?,?)').bind(id,key,file.type,file.name,file.size,String(form.get('altPt')||'').slice(0,300)||null,String(form.get('altEs')||'').slice(0,300)||null).run();
-  await audit(c.env,'create','media_asset',id,{fileName:file.name,mimeType:file.type,sizeBytes:file.size});
-  return c.json({id,url:`/api/media/${id}`,fileName:file.name,mimeType:file.type,sizeBytes:file.size},201);
+  const cacheControl='public, max-age=31536000, immutable';
+  await c.env.MEDIA.put(key,data,{httpMetadata:{contentType:file.type,cacheControl},customMetadata:{assetId:id,variant:'main'}});
+  if(cardData){
+    await c.env.MEDIA.put(variantKey(key,'card'),cardData,{httpMetadata:{contentType:'image/webp',cacheControl},customMetadata:{assetId:id,variant:'card'}});
+  }
+  const width=imageDimension(form.get('width'));
+  const height=imageDimension(form.get('height'));
+  await c.env.DB.prepare('INSERT INTO media_assets(id,r2_key,mime_type,file_name,size_bytes,width,height,alt_pt,alt_es) VALUES(?,?,?,?,?,?,?,?,?)').bind(id,key,file.type,file.name,file.size,width,height,String(form.get('altPt')||'').slice(0,300)||null,String(form.get('altEs')||'').slice(0,300)||null).run();
+  await audit(c.env,'create','media_asset',id,{fileName:file.name,mimeType:file.type,sizeBytes:file.size,width,height,hasCardVariant:!!cardData});
+  return c.json({id,url:`/api/media/${id}`,cardUrl:cardData?`/api/media/${id}?variant=card`:null,fileName:file.name,mimeType:file.type,sizeBytes:file.size,width,height},201);
 });
 
 mediaRoutes.patch('/:id', requireAdmin, async(c)=>{
@@ -105,7 +130,7 @@ mediaRoutes.delete('/:id', requireAdmin, async(c)=>{
       (SELECT COUNT(*) FROM page_localizations WHERE og_media_id=?) total
   `).bind(id,id,id,id,id,id,id).first<{total:number}>();
   if((usage?.total||0)>0)return c.json({error:'media_in_use',usageCount:usage?.total||0},409);
-  await c.env.MEDIA.delete(asset.r2_key);
+  await Promise.all([c.env.MEDIA.delete(asset.r2_key),c.env.MEDIA.delete(variantKey(asset.r2_key,'card'))]);
   await c.env.DB.prepare('DELETE FROM media_assets WHERE id=?').bind(id).run();
   await audit(c.env,'delete','media_asset',id);
   return c.json({ok:true});
@@ -115,12 +140,15 @@ mediaRoutes.get('/:id',async(c)=>{
   const id=c.req.param('id');
   const asset=await c.env.DB.prepare('SELECT r2_key,mime_type FROM media_assets WHERE id=? LIMIT 1').bind(id).first<{r2_key:string;mime_type:string}>();
   if(!asset) return c.json({error:'not_found'},404);
-  const object=await c.env.MEDIA.get(asset.r2_key);
+  const requestedVariant=c.req.query('variant')==='card'?'card':null;
+  let object=requestedVariant?await c.env.MEDIA.get(variantKey(asset.r2_key,'card')):null;
+  if(!object)object=await c.env.MEDIA.get(asset.r2_key);
   if(!object) return c.json({error:'not_found'},404);
   const headers=new Headers();
   object.writeHttpMetadata(headers);
-  headers.set('content-type',asset.mime_type);
+  if(!headers.has('content-type'))headers.set('content-type',asset.mime_type);
   headers.set('cache-control','public, max-age=31536000, s-maxage=31536000, immutable');
   headers.set('x-content-type-options','nosniff');
+  if(object.httpEtag)headers.set('etag',object.httpEtag);
   return new Response(object.body,{headers});
 });
