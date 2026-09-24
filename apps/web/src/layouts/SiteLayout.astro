@@ -146,6 +146,11 @@ const apiOrigin=(()=>{try{return apiBase?new URL(apiBase,Astro.url.origin).origi
     <Header locale={locale} chrome={chrome} compact={hubMode} instagramUrl={instagramUrl} />
     {!hubMode&&Astro.url.pathname==='/'&&<LanguageGate locale={locale} chrome={chrome} />}
     <slot />
+    <script is:inline>
+      document.querySelectorAll('img:not([decoding])').forEach((img)=>{ img.decoding='async'; });
+      const criticalImage=document.querySelector('.event-premium-hero-bg img');
+      if(criticalImage){ criticalImage.loading='eager'; criticalImage.fetchPriority='high'; }
+    </script>
     <GtrzFooter locale={locale} settings={settings} />
     <script is:inline>
       (()=>{
