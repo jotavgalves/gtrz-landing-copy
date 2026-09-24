@@ -120,7 +120,7 @@ mediaRoutes.get('/:id',async(c)=>{
   const headers=new Headers();
   object.writeHttpMetadata(headers);
   headers.set('content-type',asset.mime_type);
-  headers.set('cache-control','public, max-age=86400, s-maxage=604800');
+  headers.set('cache-control','public, max-age=31536000, s-maxage=31536000, immutable');
   headers.set('x-content-type-options','nosniff');
   return new Response(object.body,{headers});
 });
