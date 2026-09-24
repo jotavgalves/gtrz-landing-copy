@@ -24,14 +24,52 @@ if(!hubSocialMediaId&&activeHubEvent?.theme_json){
   }catch{}
 }
 const hubOgImage=hubSocialMediaId?`${apiBase}/api/media/${encodeURIComponent(hubSocialMediaId)}`:'';
+const canonicalPtUrl=new URL('/',Astro.url.origin).toString();
+const canonicalEsUrl=new URL('/?lang=es',Astro.url.origin).toString();
+const instagram=typeof payload.settings.social?.instagram==='string'
+  ?String(payload.settings.social.instagram)
+  :typeof payload.settings.social?.instagramUrl==='string'
+    ?String(payload.settings.social.instagramUrl)
+    :'https://www.instagram.com/gtrzeventos/';
+const organizationId='https://gtrz.com.br/#organization';
+const websiteId='https://gtrz.com.br/#website';
+const siteSchema={
+  '@context':'https://schema.org',
+  '@graph':[
+    {
+      '@type':'Organization',
+      '@id':organizationId,
+      name:payload.settings.general?.siteName||'GTRZ Eventos',
+      url:'https://gtrz.com.br/',
+      logo:'https://gtrz.com.br/brand/gtrz-wordmark.svg',
+      sameAs:[instagram]
+    },
+    {
+      '@type':'WebSite',
+      '@id':websiteId,
+      url:'https://gtrz.com.br/',
+      name:payload.settings.general?.siteName||'GTRZ Eventos',
+      publisher:{'@id':organizationId},
+      inLanguage:['pt-BR','es']
+    }
+  ]
+};
 ---
 {homepageMode==='full' ? (
-  <SiteLayout locale={locale} settings={payload.settings}>
+  <SiteLayout
+    locale={locale}
+    settings={payload.settings}
+    canonicalUrl={locale==='es'?canonicalEsUrl:canonicalPtUrl}
+    alternatePtUrl={canonicalPtUrl}
+    alternateEsUrl={canonicalEsUrl}
+  >
+    <script type="application/ld+json" set:html={JSON.stringify(siteSchema)}></script>
     <main>{sections.map(section=><SectionRenderer section={section} locale={locale} events={events} team={team}/>)}</main>
     <EventPopup events={events} locale={locale} siteSettings={payload.settings}/>
   </SiteLayout>
 ) : (
   <HubLayout locale={locale} ogImage={hubOgImage}>
+    <script type="application/ld+json" set:html={JSON.stringify(siteSchema)}></script>
     <EventHub events={events} locale={locale} siteSettings={payload.settings}/>
   </HubLayout>
 )}
